@@ -52,6 +52,8 @@
 - 已完成离线真实 fixture 测试与在线集成测试验证
 - 已补上 `Gold research_base` 基础表与会话审计报告
 - 已补上 London DST 边界与 Tokyo/London/NewYork/Overlap/OffSession 会话分类测试
+- 已补上 `forward_returns` 与 `walk_forward_splits` 固化产物
+- `demo` 已优先从已落盘的 `Gold research_base` 读取研究基础输入
 - 修复 `registry` sqlite 连接未显式关闭问题
 - 修复缺少 `tzdata` 时 `session` 标注直接失败的问题
 
@@ -86,7 +88,7 @@
 下一阶段重点是：
 
 1. 对照 `spec.md`、`plan.md`、`ARCHITECTURE.md` 检查现有骨架是否偏航
-2. 继续推进 C2/C3，并优先复用已落盘的 Gold `research_base`
+2. 继续推进 C3/C4，补更完整的因子评估与研究摘要
 3. 持续维护 `CONTEXT.md` 与 `docs/progress.md` 的分层记录
 
 ## 6. Git 状态

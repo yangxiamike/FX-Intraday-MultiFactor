@@ -74,6 +74,7 @@ python -m unittest discover -s tests
 - `ingest-file` 仍可用，但定位是“导入真实样本文件 / 离线回放”
 - 导入完成后会同时产出 `Silver` 标准化 bars 和 `Gold` 研究基础表
 - `Gold` 基础表默认包含 `session`、UTC 分钟索引以及 `Tokyo/London/NewYork/Overlap/OffSession` 标志列
+- `demo` 会优先从已落盘的 `Gold research_base` 读取研究基础行，并额外输出 `forward_returns` 与 `walk_forward_splits`
 - 默认离线测试依赖真实 fixture；若 fixture 不存在，相关测试会明确跳过并提示先抓样本
 
 ### 安装计划依赖

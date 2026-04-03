@@ -2,8 +2,8 @@
 
 ## 当前在做
 
-- 基于首份真实 fixture 稳定化 Gold 基础研究输入输出
-- 继续推进后续因子研究与 Gold 输入表复用
+- 基于真实 fixture 稳定化研究输入输出
+- 继续推进因子研究与研究产物固化
 
 ## 上次做到哪里
 
@@ -20,6 +20,8 @@
 - 已抓取并固化首份真实 fixture：`2025-03-03 00:00:00 UTC` 到 `2025-03-03 04:00:00 UTC`，共 `241` 根 `USDJPY 1m` bars
 - 已完成离线真实 fixture 测试与在线集成测试验证
 - 已完成 `B5` 主体：会话审计报告、Gold `research_base` 基础表、DST 边界会话测试
+- 已完成 `C2` 基础落地：`forward_returns` 与 `walk_forward_splits` 产物已落盘
+- `demo` 已切到优先读取已落盘的 `Gold research_base`
 
 ## 最近关键决定
 
@@ -33,6 +35,7 @@
 - 会话标注在缺少 `tzdata` 的 Windows Python 环境下增加内置 fallback，避免基础流程因时区库缺失而中断
 - Silver 层元数据固定包含：数据集基础信息、时间语义、标准化摘要、质量报告
 - Gold `research_base` 元数据固定包含：研究输入字段列表、会话审计报告、来源层说明
+- 第 1 轮 `walk_forward_splits` 固定使用 `120/60/60` bars 结构，先保证切分口径稳定
 - 文档分工调整为：
   - `README.md` 管总览与入口
   - `spec.md` 管范围与契约
@@ -45,11 +48,11 @@
 
 - `fastapi`、`prefect`、`backtrader` 等可选依赖当前环境仍未装齐，无法现场验证 API / 调度 / 订单适配真实运行
 - Massive/Polygon 免费档只支持最近 `2 年` 历史和 `End-of-day` recency，不适合全历史回补
-- Gold 基础研究输入表已经落地，但后续研究模块还未优先从落盘表回读
+- `Gold research_base` 已被研究流程复用，但更细的事件窗口与样本过滤还未沉淀成独立配置层
 - 本地 `git push` 仍受当前环境认证链路影响
 
 ## 下一步
 
-- 继续推进 `C2/C3`，优先复用当前 Gold `research_base`
+- 继续推进 `C3/C4`，补更完整的因子研究产物与评估摘要
 - 视需要刷新或扩充真实 fixture 窗口，但保持免费档约束内的小样本策略
 - 继续维护 `docs/progress.md` 作为阶段性里程碑记录

@@ -383,11 +383,13 @@ def run_demo_pipeline(project_root: Path | None = None) -> dict[str, Any]:
     )
 
     factor_specs = default_factor_specs()
+    lake = DataLake(paths)
+    research_base_rows = lake.load_tabular_rows(ingest_result.gold_research_base_path)
     research_result = VectorizedResearchEngine().evaluate(
         bars=ingest_result.bars,
         factor_specs=factor_specs,
+        base_rows=research_base_rows,
     )
-    lake = DataLake(paths)
 
     factor_records: list[FactorRecord] = []
     factor_report_paths: dict[str, str] = {}
@@ -440,6 +442,7 @@ def run_demo_pipeline(project_root: Path | None = None) -> dict[str, Any]:
     vectorized_path = lake.write_gold_artifact("backtests/vectorized_demo", vectorized_result)
     order_level_path = lake.write_gold_artifact("backtests/order_level_demo", order_level_result)
     lake.write_gold_artifact("research/forward_returns", research_result.forward_returns)
+    walk_forward_path = lake.write_gold_artifact("research/walk_forward_splits", research_result.walk_forward_splits)
 
     strategy_record = StrategyRecord(
         strategy_id=f"{strategy_spec.name}:{strategy_spec.version}",
@@ -482,6 +485,8 @@ def run_demo_pipeline(project_root: Path | None = None) -> dict[str, Any]:
             "gold_research_base_path": ingest_result.gold_research_base_path,
             "gold_research_metadata_path": ingest_result.gold_research_metadata_path,
             "session_audit_report": asdict(ingest_result.session_audit_report),
+            "walk_forward_splits_path": walk_forward_path,
+            "walk_forward_split_count": len(research_result.walk_forward_splits),
         },
         "backtest": {
             "vectorized_path": vectorized_path,

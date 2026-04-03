@@ -7,6 +7,8 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 
+import csv
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
@@ -22,8 +24,9 @@ from fx_multi_factor.cli import (
     run_runtime_check,
 )
 from fx_multi_factor.common.config import load_settings
-from fx_multi_factor.data.contracts import SessionLabel
+from fx_multi_factor.data.contracts import FXBar1m, SessionLabel
 from fx_multi_factor.data.sessions import classify_session
+from fx_multi_factor.research.splits import build_walk_forward_splits
 
 
 def _repo_fixture_dir(root: Path) -> Path:
@@ -115,6 +118,8 @@ class CliWorkflowTests(unittest.TestCase):
             self.assertTrue(Path(result["dataset"]["storage_path"]).exists())
             self.assertTrue(Path(result["backtest"]["vectorized_path"]).exists())
             self.assertTrue(Path(result["research"]["gold_research_base_path"]).exists())
+            self.assertTrue(Path(result["research"]["walk_forward_splits_path"]).exists())
+            self.assertGreater(result["research"]["walk_forward_split_count"], 0)
             self.assertEqual(result["research"]["session_audit_report"]["session_distribution"]["Tokyo"], 241)
         finally:
             shutil.rmtree(project_root, ignore_errors=True)
@@ -187,6 +192,37 @@ class SessionLabelTests(unittest.TestCase):
     def test_classify_session_handles_london_dst_boundary(self) -> None:
         self.assertEqual(classify_session(datetime(2025, 3, 30, 7, 30, tzinfo=UTC)), SessionLabel.LONDON)
         self.assertEqual(classify_session(datetime(2025, 3, 30, 13, 0, tzinfo=UTC)), SessionLabel.OVERLAP)
+
+
+class WalkForwardSplitTests(unittest.TestCase):
+    def test_demo_fixture_produces_one_walk_forward_split(self) -> None:
+        fixture_csv = _repo_fixture_csv(PROJECT_ROOT)
+        if not fixture_csv.exists():
+            self.skipTest("仓库内没有真实 Polygon fixture。")
+        bars: list[FXBar1m] = []
+        with fixture_csv.open("r", newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                bars.append(
+                    FXBar1m(
+                        ts=datetime.fromisoformat(str(row["ts"]).replace("Z", "+00:00")),
+                        symbol=str(row["symbol"]),
+                        open=float(row["open"]),
+                        high=float(row["high"]),
+                        low=float(row["low"]),
+                        close=float(row["close"]),
+                        tick_volume=float(row["tick_volume"]),
+                        spread_proxy=float(row["spread_proxy"]),
+                        provider=str(row["provider"]),
+                        ingest_batch_id=str(row["ingest_batch_id"]),
+                        session=SessionLabel(str(row["session"])),
+                    )
+                )
+        splits = build_walk_forward_splits(bars)
+        self.assertEqual(len(splits), 1)
+        self.assertEqual(splits[0]["train_count"], 120)
+        self.assertEqual(splits[0]["validation_count"], 60)
+        self.assertEqual(splits[0]["test_count"], 60)
 
 
 if __name__ == "__main__":

@@ -69,6 +69,18 @@ class DataLake:
             writer.writerows(rows)
         return path
 
+    def load_tabular_rows(self, path: Path) -> list[dict[str, Any]]:
+        if path.suffix == ".csv":
+            with path.open("r", newline="", encoding="utf-8") as handle:
+                return [dict(row) for row in csv.DictReader(handle)]
+        if path.suffix == ".parquet":
+            try:
+                pandas = require_dependency("pandas", "research parquet import")
+            except OptionalDependencyError as exc:
+                raise RuntimeError(f"Cannot read parquet research base without pandas: {path}") from exc
+            return pandas.read_parquet(path).to_dict(orient="records")
+        raise ValueError(f"unsupported tabular file format: {path.suffix}")
+
     def _maybe_write_parquet(self, csv_rows: list[dict[str, Any]], parquet_path: Path) -> Path | None:
         try:
             pandas = require_dependency("pandas", "research parquet export")

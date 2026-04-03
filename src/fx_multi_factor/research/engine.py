@@ -9,12 +9,14 @@ from fx_multi_factor.data.contracts import FXBar1m
 from fx_multi_factor.factors.specs import FactorSpec
 from fx_multi_factor.factors.validation import FactorValidationReport
 from fx_multi_factor.research.labels import compute_forward_returns
+from fx_multi_factor.research.splits import build_walk_forward_splits
 
 
 @dataclass(slots=True)
 class ResearchRunResult:
     feature_rows: list[dict[str, object]]
     forward_returns: dict[int, list[float | None]]
+    walk_forward_splits: list[dict[str, object]]
     reports: list[FactorValidationReport]
 
 
@@ -124,22 +126,29 @@ class VectorizedResearchEngine:
         horizons: tuple[int, ...] = (1, 5, 15),
         event_windows: list[tuple] | None = None,
         cost_per_turnover: float = 0.00002,
+        base_rows: list[dict[str, object]] | None = None,
     ) -> ResearchRunResult:
         forward_returns = compute_forward_returns(
             bars=bars,
             horizons=horizons,
             event_windows=event_windows,
         )
-        feature_rows = [
-            {
-                "ts": bar.ts,
-                "symbol": bar.symbol,
-                "session": bar.session.value if bar.session else None,
-                "close": bar.close,
-                "spread_proxy": bar.spread_proxy,
-            }
-            for bar in bars
-        ]
+        if base_rows is not None:
+            if len(base_rows) != len(bars):
+                raise ValueError("base_rows length must match bars length")
+            feature_rows = [dict(row) for row in base_rows]
+        else:
+            feature_rows = [
+                {
+                    "ts": bar.ts,
+                    "symbol": bar.symbol,
+                    "session": bar.session.value if bar.session else None,
+                    "close": bar.close,
+                    "spread_proxy": bar.spread_proxy,
+                }
+                for bar in bars
+            ]
+        walk_forward_splits = build_walk_forward_splits(bars)
         reports: list[FactorValidationReport] = []
         primary_horizon = horizons[1] if len(horizons) > 1 else horizons[0]
         for spec in factor_specs:
@@ -201,5 +210,6 @@ class VectorizedResearchEngine:
         return ResearchRunResult(
             feature_rows=feature_rows,
             forward_returns=forward_returns,
+            walk_forward_splits=walk_forward_splits,
             reports=reports,
         )
