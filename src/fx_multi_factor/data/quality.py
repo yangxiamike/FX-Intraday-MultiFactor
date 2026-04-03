@@ -12,6 +12,7 @@ def run_fx_bar_quality_checks(bars: list[FXBar1m], expected_symbol: str) -> Data
     duplicates: list[str] = []
     gaps: list[str] = []
     invalid_rows: list[str] = []
+    non_minute_aligned: list[str] = []
     issues: list[DataQualityIssue] = []
     session_counts = Counter()
     seen = set()
@@ -23,11 +24,13 @@ def run_fx_bar_quality_checks(bars: list[FXBar1m], expected_symbol: str) -> Data
             invalid_rows.append(f"{ts.isoformat()}: unexpected symbol {bar.symbol}")
         if ts.tzinfo is None or ts.tzinfo.utcoffset(ts) is None:
             invalid_rows.append(f"{ts.isoformat()}: timestamp is not timezone-aware")
+        if ts.second != 0 or ts.microsecond != 0:
+            non_minute_aligned.append(ts.isoformat())
         if ts in seen:
             duplicates.append(ts.isoformat())
         seen.add(ts)
-        if min(bar.open, bar.close) < 0 or min(bar.low, bar.high) < 0:
-            invalid_rows.append(f"{ts.isoformat()}: negative price value")
+        if min(bar.open, bar.high, bar.low, bar.close) <= 0:
+            invalid_rows.append(f"{ts.isoformat()}: non-positive OHLC price value")
         if bar.high < max(bar.open, bar.close):
             invalid_rows.append(f"{ts.isoformat()}: high below body")
         if bar.low > min(bar.open, bar.close):
@@ -58,6 +61,14 @@ def run_fx_bar_quality_checks(bars: list[FXBar1m], expected_symbol: str) -> Data
                 timestamps=gaps,
             )
         )
+    if non_minute_aligned:
+        issues.append(
+            DataQualityIssue(
+                code="non_minute_aligned_timestamp",
+                message="One or more bars are not aligned to the 1-minute bar-open timestamp convention.",
+                timestamps=non_minute_aligned,
+            )
+        )
     if invalid_rows:
         issues.append(
             DataQualityIssue(
@@ -69,13 +80,19 @@ def run_fx_bar_quality_checks(bars: list[FXBar1m], expected_symbol: str) -> Data
 
     return DataQualityReport(
         passed=not issues,
+        expected_frequency="1m",
         row_count=len(sorted_bars),
         coverage_start=sorted_bars[0].ts if sorted_bars else None,
         coverage_end=sorted_bars[-1].ts if sorted_bars else None,
+        duplicate_count=len(duplicates),
         duplicate_timestamps=duplicates,
+        gap_count=len(gaps),
         gap_timestamps=gaps,
+        invalid_row_count=len(invalid_rows),
         invalid_rows=invalid_rows,
+        non_minute_aligned_count=len(non_minute_aligned),
+        non_minute_aligned_timestamps=non_minute_aligned,
         session_distribution=dict(session_counts),
+        issue_count=len(issues),
         issues=issues,
     )
-

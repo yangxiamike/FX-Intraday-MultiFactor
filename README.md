@@ -55,11 +55,13 @@
 
 ## 本地运行
 
-### 最小验证
+### 开发态安装后最小验证
 
 ```powershell
-python -m fx_multi_factor.cli bootstrap
-python -m fx_multi_factor.cli demo
+pip install -e .
+fxmf bootstrap
+fxmf ingest-file .\data\usdjpy_1m.csv
+fxmf demo
 python -m unittest discover -s tests
 ```
 
@@ -68,6 +70,12 @@ python -m unittest discover -s tests
 ```powershell
 pip install uv
 uv pip install --system -e .[api,backtest,db,dev,orchestration,research]
+```
+
+### 启动最小 FastAPI
+
+```powershell
+uvicorn services.api.app:app --reload
 ```
 
 ### 启动 Compose
@@ -86,9 +94,11 @@ docker compose up --build
 ## 常用命令
 
 ```powershell
-python -m fx_multi_factor.cli bootstrap
-python -m fx_multi_factor.cli demo
+fxmf bootstrap
+fxmf ingest-file .\data\usdjpy_1m.csv
+fxmf demo
 python -m unittest discover -s tests
+uvicorn services.api.app:app --reload
 docker compose up --build
 ```
 

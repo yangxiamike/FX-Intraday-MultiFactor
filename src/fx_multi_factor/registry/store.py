@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import closing
 import json
 import sqlite3
 from dataclasses import asdict
@@ -18,6 +19,14 @@ def _parse_dt(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
 
 
+def _json_default(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 class RegistryStore:
     def __init__(self, path: Path):
         self.path = path
@@ -27,57 +36,58 @@ class RegistryStore:
         return sqlite3.connect(self.path)
 
     def init(self) -> None:
-        with self._connect() as connection:
-            connection.executescript(
-                """
-                create table if not exists dataset_registry (
-                    dataset_id text primary key,
-                    dataset_name text not null,
-                    layer text not null,
-                    version text not null,
-                    symbol text not null,
-                    frequency text not null,
-                    timezone text not null,
-                    source text not null,
-                    quality_status text not null,
-                    location text not null,
-                    row_count integer not null,
-                    coverage_start text,
-                    coverage_end text,
-                    schema_json text not null,
-                    metadata_json text not null,
-                    created_at text not null
-                );
-                create table if not exists factor_registry (
-                    factor_id text primary key,
-                    factor_name text not null,
-                    version text not null,
-                    status text not null,
-                    report_path text not null,
-                    metrics_json text not null,
-                    spec_json text not null,
-                    created_at text not null
-                );
-                create table if not exists strategy_registry (
-                    strategy_id text primary key,
-                    strategy_name text not null,
-                    version text not null,
-                    status text not null,
-                    factor_refs_json text not null,
-                    backtest_path text not null,
-                    risk_json text not null,
-                    created_at text not null
-                );
-                create table if not exists registry_audit (
-                    audit_id text primary key,
-                    entity_kind text not null,
-                    entity_id text not null,
-                    action text not null,
-                    payload_json text not null,
-                    created_at text not null
-                );
-                """
-            )
+        with closing(self._connect()) as connection:
+            with connection:
+                connection.executescript(
+                    """
+                    create table if not exists dataset_registry (
+                        dataset_id text primary key,
+                        dataset_name text not null,
+                        layer text not null,
+                        version text not null,
+                        symbol text not null,
+                        frequency text not null,
+                        timezone text not null,
+                        source text not null,
+                        quality_status text not null,
+                        location text not null,
+                        row_count integer not null,
+                        coverage_start text,
+                        coverage_end text,
+                        schema_json text not null,
+                        metadata_json text not null,
+                        created_at text not null
+                    );
+                    create table if not exists factor_registry (
+                        factor_id text primary key,
+                        factor_name text not null,
+                        version text not null,
+                        status text not null,
+                        report_path text not null,
+                        metrics_json text not null,
+                        spec_json text not null,
+                        created_at text not null
+                    );
+                    create table if not exists strategy_registry (
+                        strategy_id text primary key,
+                        strategy_name text not null,
+                        version text not null,
+                        status text not null,
+                        factor_refs_json text not null,
+                        backtest_path text not null,
+                        risk_json text not null,
+                        created_at text not null
+                    );
+                    create table if not exists registry_audit (
+                        audit_id text primary key,
+                        entity_kind text not null,
+                        entity_id text not null,
+                        action text not null,
+                        payload_json text not null,
+                        created_at text not null
+                    );
+                    """
+                )
 
     def _audit(self, connection: sqlite3.Connection, entity_kind: str, entity_id: str, action: str, payload: dict) -> None:
         record = AuditRecord(
@@ -98,116 +108,120 @@ class RegistryStore:
                 record.entity_kind,
                 record.entity_id,
                 record.action,
-                json.dumps(record.payload_json),
+                json.dumps(record.payload_json, default=_json_default),
                 record.created_at.isoformat(),
             ),
         )
 
     def upsert_dataset(self, record: DatasetRecord) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert or replace into dataset_registry (
-                    dataset_id, dataset_name, layer, version, symbol, frequency, timezone,
-                    source, quality_status, location, row_count, coverage_start, coverage_end,
-                    schema_json, metadata_json, created_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    record.dataset_id,
-                    record.dataset_name,
-                    record.layer,
-                    record.version,
-                    record.symbol,
-                    record.frequency,
-                    record.timezone,
-                    record.source,
-                    record.quality_status,
-                    record.location,
-                    record.row_count,
-                    _serialize_dt(record.coverage_start),
-                    _serialize_dt(record.coverage_end),
-                    json.dumps(record.schema_json),
-                    json.dumps(record.metadata_json),
-                    record.created_at.isoformat(),
-                ),
-            )
-            self._audit(connection, "dataset", record.dataset_id, "upsert", asdict(record))
+        with closing(self._connect()) as connection:
+            with connection:
+                connection.execute(
+                    """
+                    insert or replace into dataset_registry (
+                        dataset_id, dataset_name, layer, version, symbol, frequency, timezone,
+                        source, quality_status, location, row_count, coverage_start, coverage_end,
+                        schema_json, metadata_json, created_at
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        record.dataset_id,
+                        record.dataset_name,
+                        record.layer,
+                        record.version,
+                        record.symbol,
+                        record.frequency,
+                        record.timezone,
+                        record.source,
+                        record.quality_status,
+                        record.location,
+                        record.row_count,
+                        _serialize_dt(record.coverage_start),
+                        _serialize_dt(record.coverage_end),
+                        json.dumps(record.schema_json),
+                        json.dumps(record.metadata_json),
+                        record.created_at.isoformat(),
+                    ),
+                )
+                self._audit(connection, "dataset", record.dataset_id, "upsert", asdict(record))
 
     def upsert_factor(self, record: FactorRecord) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert or replace into factor_registry (
-                    factor_id, factor_name, version, status, report_path,
-                    metrics_json, spec_json, created_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    record.factor_id,
-                    record.factor_name,
-                    record.version,
-                    record.status,
-                    record.report_path,
-                    json.dumps(record.metrics_json),
-                    json.dumps(record.spec_json),
-                    record.created_at.isoformat(),
-                ),
-            )
-            self._audit(connection, "factor", record.factor_id, "upsert", asdict(record))
+        with closing(self._connect()) as connection:
+            with connection:
+                connection.execute(
+                    """
+                    insert or replace into factor_registry (
+                        factor_id, factor_name, version, status, report_path,
+                        metrics_json, spec_json, created_at
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        record.factor_id,
+                        record.factor_name,
+                        record.version,
+                        record.status,
+                        record.report_path,
+                        json.dumps(record.metrics_json),
+                        json.dumps(record.spec_json),
+                        record.created_at.isoformat(),
+                    ),
+                )
+                self._audit(connection, "factor", record.factor_id, "upsert", asdict(record))
 
     def transition_factor_status(self, factor_id: str, new_status: str) -> None:
-        with self._connect() as connection:
-            current = connection.execute(
-                "select status from factor_registry where factor_id = ?",
-                (factor_id,),
-            ).fetchone()
-            if not current:
-                raise KeyError(f"factor '{factor_id}' not found")
-            allowed = {
-                "draft": {"candidate", "retired"},
-                "candidate": {"approved", "retired"},
-                "approved": {"retired"},
-                "retired": set(),
-            }
-            if new_status not in allowed.get(current[0], set()):
-                raise ValueError(f"illegal transition from {current[0]} to {new_status}")
-            connection.execute(
-                "update factor_registry set status = ? where factor_id = ?",
-                (new_status, factor_id),
-            )
-            self._audit(
-                connection,
-                "factor",
-                factor_id,
-                "transition_status",
-                {"from": current[0], "to": new_status},
-            )
+        with closing(self._connect()) as connection:
+            with connection:
+                current = connection.execute(
+                    "select status from factor_registry where factor_id = ?",
+                    (factor_id,),
+                ).fetchone()
+                if not current:
+                    raise KeyError(f"factor '{factor_id}' not found")
+                allowed = {
+                    "draft": {"candidate", "retired"},
+                    "candidate": {"approved", "retired"},
+                    "approved": {"retired"},
+                    "retired": set(),
+                }
+                if new_status not in allowed.get(current[0], set()):
+                    raise ValueError(f"illegal transition from {current[0]} to {new_status}")
+                connection.execute(
+                    "update factor_registry set status = ? where factor_id = ?",
+                    (new_status, factor_id),
+                )
+                self._audit(
+                    connection,
+                    "factor",
+                    factor_id,
+                    "transition_status",
+                    {"from": current[0], "to": new_status},
+                )
 
     def upsert_strategy(self, record: StrategyRecord) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert or replace into strategy_registry (
-                    strategy_id, strategy_name, version, status,
-                    factor_refs_json, backtest_path, risk_json, created_at
-                ) values (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    record.strategy_id,
-                    record.strategy_name,
-                    record.version,
-                    record.status,
-                    json.dumps(record.factor_refs_json),
-                    record.backtest_path,
-                    json.dumps(record.risk_json),
-                    record.created_at.isoformat(),
-                ),
-            )
-            self._audit(connection, "strategy", record.strategy_id, "upsert", asdict(record))
+        with closing(self._connect()) as connection:
+            with connection:
+                connection.execute(
+                    """
+                    insert or replace into strategy_registry (
+                        strategy_id, strategy_name, version, status,
+                        factor_refs_json, backtest_path, risk_json, created_at
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        record.strategy_id,
+                        record.strategy_name,
+                        record.version,
+                        record.status,
+                        json.dumps(record.factor_refs_json),
+                        record.backtest_path,
+                        json.dumps(record.risk_json),
+                        record.created_at.isoformat(),
+                    ),
+                )
+                self._audit(connection, "strategy", record.strategy_id, "upsert", asdict(record))
 
     def list_datasets(self) -> list[DatasetRecord]:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             rows = connection.execute("select * from dataset_registry order by created_at desc").fetchall()
         return [
             DatasetRecord(
@@ -232,7 +246,7 @@ class RegistryStore:
         ]
 
     def list_factors(self) -> list[FactorRecord]:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             rows = connection.execute("select * from factor_registry order by created_at desc").fetchall()
         return [
             FactorRecord(
@@ -249,7 +263,7 @@ class RegistryStore:
         ]
 
     def list_strategies(self) -> list[StrategyRecord]:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             rows = connection.execute("select * from strategy_registry order by created_at desc").fetchall()
         return [
             StrategyRecord(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, time, timedelta
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fx_multi_factor.data.contracts import FXBar1m, SessionLabel
 
@@ -13,9 +13,53 @@ def _normalize_utc(ts: datetime) -> datetime:
     return ts.astimezone(UTC)
 
 
+def _last_weekday_of_month(year: int, month: int, weekday: int) -> datetime:
+    if month == 12:
+        cursor = datetime(year + 1, 1, 1, tzinfo=UTC) - timedelta(days=1)
+    else:
+        cursor = datetime(year, month + 1, 1, tzinfo=UTC) - timedelta(days=1)
+    while cursor.weekday() != weekday:
+        cursor -= timedelta(days=1)
+    return cursor
+
+
+def _nth_weekday_of_month(year: int, month: int, weekday: int, nth: int) -> datetime:
+    cursor = datetime(year, month, 1, tzinfo=UTC)
+    while cursor.weekday() != weekday:
+        cursor += timedelta(days=1)
+    return cursor + timedelta(days=(nth - 1) * 7)
+
+
+def _is_london_dst(ts_utc: datetime) -> bool:
+    start = _last_weekday_of_month(ts_utc.year, 3, 6).replace(hour=1)
+    end = _last_weekday_of_month(ts_utc.year, 10, 6).replace(hour=1)
+    return start <= ts_utc < end
+
+
+def _is_new_york_dst(ts_utc: datetime) -> bool:
+    start = _nth_weekday_of_month(ts_utc.year, 3, 6, 2).replace(hour=7)
+    end = _nth_weekday_of_month(ts_utc.year, 11, 6, 1).replace(hour=6)
+    return start <= ts_utc < end
+
+
+def _fallback_local_time(ts_utc: datetime, tz_name: str) -> time:
+    if tz_name == "Asia/Tokyo":
+        offset_hours = 9
+    elif tz_name == "Europe/London":
+        offset_hours = 1 if _is_london_dst(ts_utc) else 0
+    elif tz_name == "America/New_York":
+        offset_hours = -4 if _is_new_york_dst(ts_utc) else -5
+    else:
+        raise ZoneInfoNotFoundError(f"No fallback timezone rule for {tz_name}")
+    return (ts_utc + timedelta(hours=offset_hours)).timetz().replace(tzinfo=None)
+
+
 def _is_local_session_active(ts_utc: datetime, tz_name: str, start: time, end: time) -> bool:
-    local_ts = ts_utc.astimezone(ZoneInfo(tz_name))
-    local_time = local_ts.timetz().replace(tzinfo=None)
+    try:
+        local_ts = ts_utc.astimezone(ZoneInfo(tz_name))
+        local_time = local_ts.timetz().replace(tzinfo=None)
+    except ZoneInfoNotFoundError:
+        local_time = _fallback_local_time(ts_utc, tz_name)
     return start <= local_time < end
 
 
@@ -56,4 +100,3 @@ def next_open_minute(ts: datetime) -> datetime:
     while not is_fx_week_open(current):
         current += timedelta(minutes=1)
     return current
-

@@ -90,6 +90,18 @@ class ProviderFetchResult:
 
 
 @dataclass(slots=True)
+class NormalizationReport:
+    input_row_count: int
+    output_row_count: int
+    assumed_input_timezone: str
+    naive_timestamp_assumption_count: int
+    utc_conversion_count: int
+    default_symbol_fill_count: int
+    missing_tick_volume_fill_count: int
+    missing_spread_proxy_fill_count: int
+
+
+@dataclass(slots=True)
 class DataQualityIssue:
     code: str
     message: str
@@ -99,13 +111,20 @@ class DataQualityIssue:
 @dataclass(slots=True)
 class DataQualityReport:
     passed: bool
+    expected_frequency: str
     row_count: int
     coverage_start: datetime | None
     coverage_end: datetime | None
+    duplicate_count: int
     duplicate_timestamps: list[str]
+    gap_count: int
     gap_timestamps: list[str]
+    invalid_row_count: int
     invalid_rows: list[str]
+    non_minute_aligned_count: int
+    non_minute_aligned_timestamps: list[str]
     session_distribution: dict[str, int]
+    issue_count: int
     issues: list[DataQualityIssue]
 
 
@@ -114,9 +133,9 @@ class IngestResult:
     spec: DatasetSpec
     batch: IngestBatch
     bars: list[FXBar1m]
+    normalization_report: NormalizationReport
     quality_report: DataQualityReport
     bronze_payload_path: Path
     bronze_metadata_path: Path
     silver_data_path: Path
     silver_metadata_path: Path
-

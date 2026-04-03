@@ -13,12 +13,12 @@
 
 当前处于：
 
-- 文档先行阶段
+- 工程骨架修正与入口落地阶段
 
 当前原则：
 
-- 暂不继续盲目扩代码
-- 先把规格、计划和架构文档打磨清楚
+- 先修正文档与代码骨架之间的显式偏航
+- 先补最小可执行入口，再进入数据链路正式落地
 
 ## 2. 已完成事项
 
@@ -37,6 +37,16 @@
 - 初始化本地 git 仓库
 - 完成本地第 1 个提交
 - 仓库中已经存在一批早期代码骨架文件
+- 补齐 `src/fx_multi_factor/cli.py`，实现 `bootstrap / demo / registry / runtime-check`
+- 补齐 `fxmf ingest-file`，支持本地 `CSV` 导入到 Bronze / Silver 并登记 dataset registry
+- 补齐 `services/api/app.py`，实现 `/healthz`、`/v1/datasets`、`/v1/factors`、`/v1/strategies`
+- 新增最小 `unittest`，覆盖 bootstrap、demo、runtime-check 主路径
+- 新增文件导入测试，覆盖本地 CSV 导入主路径
+- 固化 `NormalizationReport` 与 Silver 元数据结构，明确 UTC / bar-open / session 语义
+- 增强 `DataQualityReport`，补齐重复、缺口、非法价格、非整分钟时间戳等摘要字段
+- 新增质量检查测试，覆盖非整分钟时间戳告警
+- 修复 `registry` sqlite 连接未显式关闭问题
+- 修复缺少 `tzdata` 时 `session` 标注直接失败的问题
 
 ## 3. 当前已存在的代码骨架
 
@@ -51,7 +61,8 @@
 说明：
 
 - 这些文件代表早期骨架已经开始形成
-- 但后续继续实现前，仍需以文档为准对照检查
+- 当前已完成第一轮偏航修正，至少入口层承诺与代码实现已对齐
+- 后续仍需继续按任务组审视并补齐数据链路细节
 
 ## 4. 第 1 轮当前确认状态
 
@@ -68,7 +79,7 @@
 下一阶段重点是：
 
 1. 对照 `spec.md`、`plan.md`、`ARCHITECTURE.md` 检查现有骨架是否偏航
-2. 按任务组逐步恢复正式开发
+2. 进入任务组 B5，补齐会话标注复核与 Gold 基础研究输入输出
 3. 持续维护 `CONTEXT.md` 与 `docs/progress.md` 的分层记录
 
 ## 6. Git 状态

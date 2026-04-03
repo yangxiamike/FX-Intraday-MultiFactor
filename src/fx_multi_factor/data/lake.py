@@ -10,7 +10,7 @@ from typing import Any, Iterable
 
 from fx_multi_factor.common.deps import OptionalDependencyError, require_dependency
 from fx_multi_factor.common.paths import ProjectPaths
-from fx_multi_factor.data.contracts import DataQualityReport, DatasetLayer, FXBar1m, IngestBatch
+from fx_multi_factor.data.contracts import DataQualityReport, DatasetLayer, DatasetSpec, FXBar1m, IngestBatch, NormalizationReport
 
 
 def _json_default(value: Any) -> Any:
@@ -105,7 +105,9 @@ class DataLake:
         self,
         dataset_name: str,
         batch_id: str,
+        spec: DatasetSpec,
         bars: list[FXBar1m],
+        normalization_report: NormalizationReport,
         quality_report: DataQualityReport,
     ) -> tuple[Path, Path]:
         target_dir = self.dataset_dir(DatasetLayer.SILVER, dataset_name)
@@ -119,8 +121,23 @@ class DataLake:
             metadata_path,
             {
                 "batch_id": batch_id,
+                "dataset_name": dataset_name,
+                "symbol": spec.symbol,
+                "frequency": spec.frequency,
+                "timezone": "UTC",
+                "schema": spec.schema,
                 "storage_path": storage_path,
                 "storage_format": storage_path.suffix.lstrip("."),
+                "row_count": len(bars),
+                "coverage_start": bars[0].ts if bars else None,
+                "coverage_end": bars[-1].ts if bars else None,
+                "time_semantics": {
+                    "timestamp_field": "ts",
+                    "timestamp_timezone": "UTC",
+                    "bar_time_basis": "bar_open_time",
+                    "session_field": "session",
+                },
+                "normalization_report": normalization_report,
                 "quality_report": quality_report,
             },
         )
@@ -136,4 +153,3 @@ class DataLake:
         with path.open("w", encoding="utf-8") as handle:
             handle.write(str(payload))
         return path
-

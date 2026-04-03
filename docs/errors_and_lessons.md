@@ -83,19 +83,32 @@
 - GitHub 上传需要额外具备远端仓库和认证路径
 - 如果后续要自动上传，需补齐 `gh`、token，或先创建远端仓库
 
-### 1.7 当前 GitHub push 受本机认证链路影响
+### 1.7 Git Credential Manager 当前无法提供 GitHub 凭据
 
 已观察到：
 
-- 远端仓库已配置，但当前无法直接完成上传
-- 本地仍缺 `gh`
-- 当前环境认证链路不足以直接完成 GitHub push
+- 本机存在 `git credential-manager`
+- 但执行 `git credential fill` 获取 GitHub 凭据时失败
+- 关键报错包括：
+- `failed to execute prompt script`
+- `fatal: could not read Username for 'https://github.com'`
 
 经验：
 
-- 先把本地提交、文档和结构整理好
-- 远端上传需要额外补齐认证路径
-- 后续如果继续走自动上传，优先补 `gh auth` 或可用 token
+- 仅安装 credential manager 不代表已经完成 GitHub 登录
+- 若要自动创建远端仓库或自动 push，需要先具备真正可用的 GitHub 认证路径
+
+### 1.8 Windows Python 可能缺少 `tzdata`
+
+已观察到：
+
+- 当前环境用 `zoneinfo.ZoneInfo("Europe/London")` 时直接报错
+- 关键异常为 `ZoneInfoNotFoundError`
+
+经验：
+
+- 不要假设 Windows Python 一定自带完整 IANA 时区库
+- 涉及会话标注时，优先提供 fallback 规则，或明确要求安装 `tzdata`
 
 ## 2. 已总结的开发经验
 
