@@ -1,0 +1,52 @@
+{
+  "provider": "polygon",
+  "symbol": "USDJPY",
+  "frequency": "1m",
+  "timezone": "UTC",
+  "history_cap": "2_years_basic_plan",
+  "sample_window": {
+    "start": "2025-03-03T00:00:00+00:00",
+    "end": "2025-03-03T04:00:00+00:00",
+    "expected_rows_hint": 240
+  },
+  "normalization_report": {
+    "input_row_count": 241,
+    "output_row_count": 241,
+    "assumed_input_timezone": "UTC",
+    "naive_timestamp_assumption_count": 0,
+    "utc_conversion_count": 0,
+    "default_symbol_fill_count": 0,
+    "missing_tick_volume_fill_count": 0,
+    "missing_spread_proxy_fill_count": 241
+  },
+  "quality_report": {
+    "passed": true,
+    "expected_frequency": "1m",
+    "row_count": 241,
+    "coverage_start": "2025-03-03T00:00:00+00:00",
+    "coverage_end": "2025-03-03T04:00:00+00:00",
+    "duplicate_count": 0,
+    "duplicate_timestamps": [],
+    "gap_count": 0,
+    "gap_timestamps": [],
+    "invalid_row_count": 0,
+    "invalid_rows": [],
+    "non_minute_aligned_count": 0,
+    "non_minute_aligned_timestamps": [],
+    "session_distribution": {
+      "Tokyo": 241
+    },
+    "issue_count": 0,
+    "issues": []
+  },
+  "fetch_metadata": {
+    "provider": "polygon",
+    "source_uri": "https://api.polygon.io/v2/aggs/ticker/C:USDJPY/range/1/minute/1740960000000/1740974400000?adjusted=true&sort=asc&limit=5000&apiKey=I03UiaLb_fN8KuO3hDNESb9tJfQmCfPu",
+    "response_ticker": "C:USDJPY",
+    "results_count": 241,
+    "query_count": 241,
+    "request_id": "394b868eb4174c022d1386d67fce4b1f",
+    "history_cap": "2_years_basic_plan",
+    "recency": "end_of_day"
+  }
+}

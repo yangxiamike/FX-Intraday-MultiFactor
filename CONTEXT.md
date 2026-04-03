@@ -2,8 +2,8 @@
 
 ## 当前在做
 
-- 落地 Massive/Polygon 免费档 API 小样本接入
-- 把测试口径从“本地样本 / 生成样本混用”推进到“真实 API 样本优先”
+- 基于首份真实 fixture 稳定化 Massive/Polygon 免费档小样本链路
+- 继续推进后续 `B5` 会话标注复核与 Gold 基础输出
 
 ## 上次做到哪里
 
@@ -17,6 +17,8 @@
 - 已补上质量报告摘要字段，覆盖 `1m` 频率、重复、缺口、非法价格、非整分钟时间戳等检查
 - 已补上 Massive/Polygon 免费档 provider 骨架和 `fetch-api-sample / ingest-api-sample` CLI 入口
 - `demo` 已切换为优先消费真实 fixture；若 fixture 缺失，会明确提示先抓取真实样本
+- 已抓取并固化首份真实 fixture：`2025-03-03 00:00:00 UTC` 到 `2025-03-03 04:00:00 UTC`，共 `241` 根 `USDJPY 1m` bars
+- 已完成离线真实 fixture 测试与在线集成测试验证
 
 ## 最近关键决定
 
@@ -40,13 +42,12 @@
 ## 当前阻塞
 
 - `fastapi`、`prefect`、`backtrader` 等可选依赖当前环境仍未装齐，无法现场验证 API / 调度 / 订单适配真实运行
-- 当前环境没有 `FXMF_POLYGON_API_KEY`，无法在本地直接抓取并固化真实 fixture
 - Massive/Polygon 免费档只支持最近 `2 年` 历史和 `End-of-day` recency，不适合全历史回补
 - Gold 基础研究输入表还未单独沉淀，当前仍以 Silver + research 运行时计算为主
 - 本地 `git push` 仍受当前环境认证链路影响
 
 ## 下一步
 
-- 在具备 `FXMF_POLYGON_API_KEY` 后抓取并固化首份真实 fixture
 - 继续推进 `B5`，补会话标注复核与 Gold 基础研究输入输出
+- 视需要刷新或扩充真实 fixture 窗口，但保持免费档约束内的小样本策略
 - 继续维护 `docs/progress.md` 作为阶段性里程碑记录

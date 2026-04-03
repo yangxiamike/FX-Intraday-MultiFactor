@@ -48,6 +48,8 @@
 - 补上 Massive/Polygon 免费档 provider 实现骨架
 - 新增 `fetch-api-sample / ingest-api-sample` 命令
 - 将 `demo` 和测试主路径切换到真实 fixture 优先
+- 已固化首份真实 `USDJPY 1m` fixture：`2025-03-03 00:00:00 UTC` 到 `2025-03-03 04:00:00 UTC`，共 `241` 根 bars
+- 已完成离线真实 fixture 测试与在线集成测试验证
 - 修复 `registry` sqlite 连接未显式关闭问题
 - 修复缺少 `tzdata` 时 `session` 标注直接失败的问题
 
@@ -82,7 +84,7 @@
 下一阶段重点是：
 
 1. 对照 `spec.md`、`plan.md`、`ARCHITECTURE.md` 检查现有骨架是否偏航
-2. 在拿到真实 API key 后固化首份 fixture，并继续推进 B5
+2. 继续推进 B5，并以当前真实 fixture 为基础补会话标注与 Gold 基础输出
 3. 持续维护 `CONTEXT.md` 与 `docs/progress.md` 的分层记录
 
 ## 6. Git 状态
