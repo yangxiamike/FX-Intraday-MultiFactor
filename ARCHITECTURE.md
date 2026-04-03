@@ -17,12 +17,13 @@
 1. Massive/Polygon 免费档 API 先拉取 `USDJPY 1m` 固定真实样本窗口
 2. 原始 API 响应写入 `Bronze`，并同步固化为测试 fixture 与本地缓存
 3. 标准化、UTC 对齐、会话标注和质量检查后产出 `Silver`
-4. 研究输入、forward returns、因子输入矩阵和回测产物写入 `Gold`
-5. `research` 与 `factors` 基于 `Gold` 产出验证报告和 tearsheet
-6. `backtest` 基于因子结果和策略定义输出研究回测结果与订单级事件骨架
-7. `registry` 记录 dataset / factor / strategy 的版本、状态和引用关系
-8. `runtime` 组合注册表状态和运行时上下文，返回 Deploy Gate / Runtime Gate 结果
-9. `Notebook`、`CLI`、`FastAPI` 作为统一入口消费上述能力
+4. `data` 基于 `Silver` bars 继续沉淀 `Gold research_base`，固定输出 UTC 分钟、session 标签和会话标志列
+5. 研究输入、forward returns、因子输入矩阵和回测产物写入 `Gold`
+6. `research` 与 `factors` 基于 `Gold` 产出验证报告和 tearsheet
+7. `backtest` 基于因子结果和策略定义输出研究回测结果与订单级事件骨架
+8. `registry` 记录 dataset / factor / strategy 的版本、状态和引用关系
+9. `runtime` 组合注册表状态和运行时上下文，返回 Deploy Gate / Runtime Gate 结果
+10. `Notebook`、`CLI`、`FastAPI` 作为统一入口消费上述能力
 
 ## 关键设计决策
 
@@ -30,6 +31,7 @@
 - 数据管理统一采用 `Bronze / Silver / Gold`
 - 外部数据源必须通过 provider 抽象接入，第 1 轮优先 `Massive/Polygon` 免费档 API 小样本
 - 文件导入保留为真实样本回放路径，不再作为主接入策略
+- `Gold research_base` 作为第 1 轮固定研究输入底表，由数据层直接从 `Silver` bars 沉淀
 - 注册表开发态允许 `sqlite`，但接口设计必须兼容 `PostgreSQL`
 - 回测分两层：研究向量化回测做完整，订单级回测先保留适配骨架
 - `Backtrader` 只能隐藏在适配层之后，不能污染业务对象模型

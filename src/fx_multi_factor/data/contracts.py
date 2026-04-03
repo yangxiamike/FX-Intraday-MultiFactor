@@ -129,13 +129,27 @@ class DataQualityReport:
 
 
 @dataclass(slots=True)
+class SessionAuditReport:
+    row_count: int
+    first_session: str | None
+    last_session: str | None
+    off_session_count: int
+    session_distribution: dict[str, int]
+    transition_count: int
+    transitions: dict[str, int]
+
+
+@dataclass(slots=True)
 class IngestResult:
     spec: DatasetSpec
     batch: IngestBatch
     bars: list[FXBar1m]
     normalization_report: NormalizationReport
     quality_report: DataQualityReport
+    session_audit_report: SessionAuditReport
     bronze_payload_path: Path
     bronze_metadata_path: Path
     silver_data_path: Path
     silver_metadata_path: Path
+    gold_research_base_path: Path
+    gold_research_metadata_path: Path

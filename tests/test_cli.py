@@ -4,6 +4,7 @@ import json
 import shutil
 import sys
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +22,8 @@ from fx_multi_factor.cli import (
     run_runtime_check,
 )
 from fx_multi_factor.common.config import load_settings
+from fx_multi_factor.data.contracts import SessionLabel
+from fx_multi_factor.data.sessions import classify_session
 
 
 def _repo_fixture_dir(root: Path) -> Path:
@@ -84,14 +87,18 @@ class CliWorkflowTests(unittest.TestCase):
             fixture_csv = self._copy_repo_fixture_bundle(project_root)
             result = ingest_file(file_path=fixture_csv, project_root=project_root, provider_name="polygon_fixture")
             metadata = json.loads(Path(result["artifacts"]["silver_metadata_path"]).read_text(encoding="utf-8"))
+            gold_metadata = json.loads(Path(result["artifacts"]["gold_research_metadata_path"]).read_text(encoding="utf-8"))
 
             self.assertEqual(result["status"], "completed")
             self.assertEqual(result["dataset"]["dataset_name"], "usdjpy_1m")
             self.assertGreater(result["dataset"]["row_count"], 0)
             self.assertTrue(Path(result["artifacts"]["silver_data_path"]).exists())
             self.assertTrue(Path(result["artifacts"]["bronze_metadata_path"]).exists())
+            self.assertTrue(Path(result["artifacts"]["gold_research_base_path"]).exists())
             self.assertEqual(metadata["time_semantics"]["bar_time_basis"], "bar_open_time")
             self.assertEqual(metadata["quality_report"]["expected_frequency"], "1m")
+            self.assertEqual(gold_metadata["session_audit_report"]["row_count"], result["dataset"]["row_count"])
+            self.assertIn("is_tokyo_session", gold_metadata["research_columns"])
         finally:
             shutil.rmtree(project_root, ignore_errors=True)
 
@@ -107,6 +114,8 @@ class CliWorkflowTests(unittest.TestCase):
             self.assertEqual(result["registry"]["strategy_records"], 1)
             self.assertTrue(Path(result["dataset"]["storage_path"]).exists())
             self.assertTrue(Path(result["backtest"]["vectorized_path"]).exists())
+            self.assertTrue(Path(result["research"]["gold_research_base_path"]).exists())
+            self.assertEqual(result["research"]["session_audit_report"]["session_distribution"]["Tokyo"], 241)
         finally:
             shutil.rmtree(project_root, ignore_errors=True)
 
@@ -150,6 +159,7 @@ class PolygonLiveIntegrationTests(unittest.TestCase):
             self.assertTrue(_repo_fixture_csv(project_root).exists())
             self.assertTrue(_repo_fixture_raw(project_root).exists())
             self.assertTrue(_repo_fixture_metadata(project_root).exists())
+            self.assertEqual(result["session_audit_report"]["session_distribution"]["Tokyo"], result["row_count"])
         finally:
             shutil.rmtree(project_root, ignore_errors=True)
 
@@ -161,8 +171,22 @@ class PolygonLiveIntegrationTests(unittest.TestCase):
             self.assertEqual(result["status"], "completed")
             self.assertGreater(result["ingest"]["dataset"]["row_count"], 0)
             self.assertTrue(Path(result["ingest"]["artifacts"]["silver_data_path"]).exists())
+            self.assertTrue(Path(result["ingest"]["artifacts"]["gold_research_base_path"]).exists())
         finally:
             shutil.rmtree(project_root, ignore_errors=True)
+
+
+class SessionLabelTests(unittest.TestCase):
+    def test_classify_session_covers_tokyo_london_new_york_overlap_and_off_session(self) -> None:
+        self.assertEqual(classify_session(datetime(2025, 3, 3, 0, 0, tzinfo=UTC)), SessionLabel.TOKYO)
+        self.assertEqual(classify_session(datetime(2025, 1, 15, 8, 30, tzinfo=UTC)), SessionLabel.LONDON)
+        self.assertEqual(classify_session(datetime(2025, 1, 15, 18, 0, tzinfo=UTC)), SessionLabel.NEW_YORK)
+        self.assertEqual(classify_session(datetime(2025, 1, 15, 14, 0, tzinfo=UTC)), SessionLabel.OVERLAP)
+        self.assertEqual(classify_session(datetime(2025, 1, 15, 23, 0, tzinfo=UTC)), SessionLabel.OFF_SESSION)
+
+    def test_classify_session_handles_london_dst_boundary(self) -> None:
+        self.assertEqual(classify_session(datetime(2025, 3, 30, 7, 30, tzinfo=UTC)), SessionLabel.LONDON)
+        self.assertEqual(classify_session(datetime(2025, 3, 30, 13, 0, tzinfo=UTC)), SessionLabel.OVERLAP)
 
 
 if __name__ == "__main__":

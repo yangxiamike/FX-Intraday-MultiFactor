@@ -151,6 +151,19 @@
 - 免费档样本应优先选择完整历史窗口，不要选接近当前时点的边界时间
 - fixture 一旦固化后，应同时保留 `raw.json`、`csv` 和 `metadata.json`
 
+### 1.12 会话标注要单独验证 DST 边界
+
+已观察到：
+
+- `Tokyo/London/NewYork/Overlap/OffSession` 的日常时段判断不复杂
+- 真正容易出错的是 `Europe/London` 与 `America/New_York` 的 DST 切换边界
+
+经验：
+
+- 不要只靠真实 fixture 的单一区间验证会话标注
+- 至少要补一组覆盖 London DST 切换日的单元测试
+- 会话审计报告应和 Gold 研究基础表一起落盘，便于后续研究排查 session 口径
+
 ## 2. 已总结的开发经验
 
 - 这类系统最容易出问题的地方，不是代码量，而是范围和边界不清

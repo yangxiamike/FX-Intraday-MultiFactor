@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
 from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fx_multi_factor.data.contracts import FXBar1m, SessionLabel
+from fx_multi_factor.data.contracts import FXBar1m, SessionAuditReport, SessionLabel
 
 
 def _normalize_utc(ts: datetime) -> datetime:
@@ -93,6 +94,25 @@ def classify_session(ts: datetime) -> SessionLabel:
 
 def annotate_sessions(bars: list[FXBar1m]) -> list[FXBar1m]:
     return [replace(bar, session=classify_session(bar.ts)) for bar in bars]
+
+
+def summarize_sessions(bars: list[FXBar1m]) -> SessionAuditReport:
+    session_values = [bar.session.value for bar in bars if bar.session]
+    distribution = dict(Counter(session_values))
+    transitions: Counter[str] = Counter()
+    for left, right in zip(session_values, session_values[1:]):
+        if left == right:
+            continue
+        transitions[f"{left}->{right}"] += 1
+    return SessionAuditReport(
+        row_count=len(bars),
+        first_session=session_values[0] if session_values else None,
+        last_session=session_values[-1] if session_values else None,
+        off_session_count=distribution.get(SessionLabel.OFF_SESSION.value, 0),
+        session_distribution=distribution,
+        transition_count=sum(transitions.values()),
+        transitions=dict(transitions),
+    )
 
 
 def next_open_minute(ts: datetime) -> datetime:

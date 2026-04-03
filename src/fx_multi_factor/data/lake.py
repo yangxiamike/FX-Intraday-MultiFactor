@@ -10,7 +10,16 @@ from typing import Any, Iterable
 
 from fx_multi_factor.common.deps import OptionalDependencyError, require_dependency
 from fx_multi_factor.common.paths import ProjectPaths
-from fx_multi_factor.data.contracts import DataQualityReport, DatasetLayer, DatasetSpec, FXBar1m, IngestBatch, NormalizationReport
+from fx_multi_factor.data.contracts import (
+    DataQualityReport,
+    DatasetLayer,
+    DatasetSpec,
+    FXBar1m,
+    IngestBatch,
+    NormalizationReport,
+    SessionAuditReport,
+    SessionLabel,
+)
 
 
 def _json_default(value: Any) -> Any:
@@ -153,3 +162,89 @@ class DataLake:
         with path.open("w", encoding="utf-8") as handle:
             handle.write(str(payload))
         return path
+
+    def write_gold_research_base(
+        self,
+        dataset_name: str,
+        batch_id: str,
+        spec: DatasetSpec,
+        bars: list[FXBar1m],
+        session_audit_report: SessionAuditReport,
+    ) -> tuple[Path, Path]:
+        target_dir = self.dataset_dir(DatasetLayer.GOLD, dataset_name) / "research_base"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        csv_rows = []
+        for bar in bars:
+            session_value = bar.session.value if bar.session else None
+            csv_rows.append(
+                {
+                    "ts": bar.ts.isoformat(),
+                    "date": bar.ts.date().isoformat(),
+                    "minute_of_day_utc": bar.ts.hour * 60 + bar.ts.minute,
+                    "weekday_utc": bar.ts.weekday(),
+                    "symbol": bar.symbol,
+                    "session": session_value,
+                    "is_tokyo_session": int(session_value == SessionLabel.TOKYO.value),
+                    "is_london_session": int(session_value == SessionLabel.LONDON.value),
+                    "is_new_york_session": int(session_value == SessionLabel.NEW_YORK.value),
+                    "is_overlap_session": int(session_value == SessionLabel.OVERLAP.value),
+                    "is_off_session": int(session_value == SessionLabel.OFF_SESSION.value),
+                    "open": bar.open,
+                    "high": bar.high,
+                    "low": bar.low,
+                    "close": bar.close,
+                    "tick_volume": bar.tick_volume,
+                    "spread_proxy": bar.spread_proxy,
+                    "provider": bar.provider,
+                    "ingest_batch_id": bar.ingest_batch_id,
+                }
+            )
+        csv_path = target_dir / f"{batch_id}.csv"
+        metadata_path = target_dir / f"{batch_id}.metadata.json"
+        self._write_csv(csv_path, csv_rows, list(csv_rows[0].keys()) if csv_rows else ["ts"])
+        parquet_path = self._maybe_write_parquet(csv_rows, target_dir / f"{batch_id}.parquet")
+        storage_path = parquet_path or csv_path
+        self._write_json(
+            metadata_path,
+            {
+                "batch_id": batch_id,
+                "dataset_name": dataset_name,
+                "symbol": spec.symbol,
+                "frequency": spec.frequency,
+                "timezone": "UTC",
+                "storage_path": storage_path,
+                "storage_format": storage_path.suffix.lstrip("."),
+                "row_count": len(bars),
+                "coverage_start": bars[0].ts if bars else None,
+                "coverage_end": bars[-1].ts if bars else None,
+                "derived_from": {
+                    "layer": DatasetLayer.SILVER.value,
+                    "timestamp_field": "ts",
+                    "session_field": "session",
+                },
+                "research_columns": [
+                    "ts",
+                    "date",
+                    "minute_of_day_utc",
+                    "weekday_utc",
+                    "symbol",
+                    "session",
+                    "is_tokyo_session",
+                    "is_london_session",
+                    "is_new_york_session",
+                    "is_overlap_session",
+                    "is_off_session",
+                    "open",
+                    "high",
+                    "low",
+                    "close",
+                    "tick_volume",
+                    "spread_proxy",
+                    "provider",
+                    "ingest_batch_id",
+                ],
+                "session_audit_report": session_audit_report,
+            },
+        )
+        self._maybe_register_duckdb_view(f"{dataset_name}_research_base", storage_path)
+        return storage_path, metadata_path

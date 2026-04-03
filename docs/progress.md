@@ -50,6 +50,8 @@
 - 将 `demo` 和测试主路径切换到真实 fixture 优先
 - 已固化首份真实 `USDJPY 1m` fixture：`2025-03-03 00:00:00 UTC` 到 `2025-03-03 04:00:00 UTC`，共 `241` 根 bars
 - 已完成离线真实 fixture 测试与在线集成测试验证
+- 已补上 `Gold research_base` 基础表与会话审计报告
+- 已补上 London DST 边界与 Tokyo/London/NewYork/Overlap/OffSession 会话分类测试
 - 修复 `registry` sqlite 连接未显式关闭问题
 - 修复缺少 `tzdata` 时 `session` 标注直接失败的问题
 
@@ -84,7 +86,7 @@
 下一阶段重点是：
 
 1. 对照 `spec.md`、`plan.md`、`ARCHITECTURE.md` 检查现有骨架是否偏航
-2. 继续推进 B5，并以当前真实 fixture 为基础补会话标注与 Gold 基础输出
+2. 继续推进 C2/C3，并优先复用已落盘的 Gold `research_base`
 3. 持续维护 `CONTEXT.md` 与 `docs/progress.md` 的分层记录
 
 ## 6. Git 状态

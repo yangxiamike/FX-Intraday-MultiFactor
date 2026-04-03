@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from fx_multi_factor.data.contracts import DatasetSpec, FXBar1m, IngestBatch, IngestResult, NormalizationReport
 from fx_multi_factor.data.lake import DataLake
 from fx_multi_factor.data.quality import run_fx_bar_quality_checks
-from fx_multi_factor.data.sessions import annotate_sessions
+from fx_multi_factor.data.sessions import annotate_sessions, summarize_sessions
 from fx_multi_factor.interfaces.data import MarketDataProvider
 
 
@@ -94,6 +94,7 @@ def ingest_market_data(
         provider_name=provider.name,
     )
     quality_report = run_fx_bar_quality_checks(bars, expected_symbol=spec.symbol)
+    session_audit_report = summarize_sessions(bars)
     completed_at = datetime.now(tz=UTC)
     batch = IngestBatch(
         batch_id=batch_id,
@@ -118,14 +119,24 @@ def ingest_market_data(
         normalization_report=normalization_report,
         quality_report=quality_report,
     )
+    gold_research_base_path, gold_research_metadata_path = lake.write_gold_research_base(
+        dataset_name=spec.name,
+        batch_id=batch_id,
+        spec=spec,
+        bars=bars,
+        session_audit_report=session_audit_report,
+    )
     return IngestResult(
         spec=spec,
         batch=batch,
         bars=bars,
         normalization_report=normalization_report,
         quality_report=quality_report,
+        session_audit_report=session_audit_report,
         bronze_payload_path=bronze_payload_path,
         bronze_metadata_path=bronze_metadata_path,
         silver_data_path=silver_data_path,
         silver_metadata_path=silver_metadata_path,
+        gold_research_base_path=gold_research_base_path,
+        gold_research_metadata_path=gold_research_metadata_path,
     )

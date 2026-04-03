@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from dataclasses import asdict, is_dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import Enum
@@ -13,12 +14,14 @@ from fx_multi_factor.backtest.costs import CostModel
 from fx_multi_factor.backtest.order_level import BacktraderOrderLevelBacktestEngine
 from fx_multi_factor.backtest.vectorized import StrategySpec, VectorizedResearchBacktestEngine
 from fx_multi_factor.common.config import load_settings
+from fx_multi_factor.common.feishu import send_feishu_text_message
 from fx_multi_factor.common.paths import ProjectPaths
 from fx_multi_factor.data.contracts import DatasetLayer, DatasetSpec
 from fx_multi_factor.data.lake import DataLake
 from fx_multi_factor.data.pipeline import ingest_market_data, normalize_fx_bars
 from fx_multi_factor.data.providers import LocalCsvMarketDataProvider, PolygonCurrenciesProvider
 from fx_multi_factor.data.quality import run_fx_bar_quality_checks
+from fx_multi_factor.data.sessions import summarize_sessions
 from fx_multi_factor.factors.library import default_factor_specs
 from fx_multi_factor.registry.models import (
     DatasetRecord,
@@ -165,7 +168,9 @@ def _build_polygon_provider(project_root: Path | None = None) -> PolygonCurrenci
     )
 
 
-def _fetch_sample_bundle(project_root: Path | None = None) -> tuple[ProjectPaths, dict[str, Path], DatasetSpec, Any, list[Any], Any, Any]:
+def _fetch_sample_bundle(
+    project_root: Path | None = None,
+) -> tuple[ProjectPaths, dict[str, Path], DatasetSpec, Any, list[Any], Any, Any, Any]:
     settings = load_settings(project_root=project_root)
     paths = ProjectPaths.from_settings(settings)
     paths.ensure()
@@ -180,12 +185,13 @@ def _fetch_sample_bundle(project_root: Path | None = None) -> tuple[ProjectPaths
         provider_name=provider.name,
     )
     quality_report = run_fx_bar_quality_checks(bars, expected_symbol=spec.symbol)
+    session_audit_report = summarize_sessions(bars)
     fixture_paths = _fixture_paths(project_root=paths.root, paths=paths)
-    return paths, fixture_paths, spec, fetched, bars, normalization_report, quality_report
+    return paths, fixture_paths, spec, fetched, bars, normalization_report, quality_report, session_audit_report
 
 
 def fetch_api_sample(project_root: Path | None = None) -> dict[str, Any]:
-    paths, fixture_paths, spec, fetched, bars, normalization_report, quality_report = _fetch_sample_bundle(
+    paths, fixture_paths, spec, fetched, bars, normalization_report, quality_report, session_audit_report = _fetch_sample_bundle(
         project_root=project_root
     )
     csv_rows = [bar.as_record() for bar in bars]
@@ -202,6 +208,7 @@ def fetch_api_sample(project_root: Path | None = None) -> dict[str, Any]:
         },
         "normalization_report": normalization_report,
         "quality_report": quality_report,
+        "session_audit_report": session_audit_report,
         "fetch_metadata": fetched.metadata,
     }
     for raw_key, csv_key, metadata_key in (
@@ -222,6 +229,7 @@ def fetch_api_sample(project_root: Path | None = None) -> dict[str, Any]:
         "row_count": len(bars),
         "normalization_report": asdict(normalization_report),
         "quality_report": asdict(quality_report),
+        "session_audit_report": asdict(session_audit_report),
         "fixture_paths": {key: value for key, value in fixture_paths.items()},
     }
 
@@ -330,11 +338,14 @@ def ingest_file(
         },
         "normalization_report": asdict(ingest_result.normalization_report),
         "quality_report": asdict(ingest_result.quality_report),
+        "session_audit_report": asdict(ingest_result.session_audit_report),
         "artifacts": {
             "bronze_payload_path": ingest_result.bronze_payload_path,
             "bronze_metadata_path": ingest_result.bronze_metadata_path,
             "silver_data_path": ingest_result.silver_data_path,
             "silver_metadata_path": ingest_result.silver_metadata_path,
+            "gold_research_base_path": ingest_result.gold_research_base_path,
+            "gold_research_metadata_path": ingest_result.gold_research_metadata_path,
         },
         "registry": {
             "dataset_records": len(registry.list_datasets()),
@@ -468,6 +479,9 @@ def run_demo_pipeline(project_root: Path | None = None) -> dict[str, Any]:
         "research": {
             "factor_count": len(research_result.reports),
             "factor_reports": factor_report_paths,
+            "gold_research_base_path": ingest_result.gold_research_base_path,
+            "gold_research_metadata_path": ingest_result.gold_research_metadata_path,
+            "session_audit_report": asdict(ingest_result.session_audit_report),
         },
         "backtest": {
             "vectorized_path": vectorized_path,
@@ -530,6 +544,23 @@ def run_runtime_check(project_root: Path | None = None) -> dict[str, Any]:
     }
 
 
+def notify_feishu(
+    message: str | None = None,
+    title: str | None = None,
+    project_root: Path | None = None,
+) -> dict[str, Any]:
+    text = message.strip() if message else ""
+    if not text and not sys.stdin.isatty():
+        text = sys.stdin.read().strip()
+    if not text:
+        raise ValueError("notify-feishu 需要通过参数或 stdin 提供消息内容")
+    return send_feishu_text_message(
+        message=text,
+        title=title,
+        project_root=project_root,
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fxmf", description="FX multi-factor project scaffold CLI.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -551,6 +582,9 @@ def _build_parser() -> argparse.ArgumentParser:
     registry_parser.add_argument("entity", choices=["datasets", "factors", "strategies"])
 
     subparsers.add_parser("runtime-check", help="Evaluate the runtime gate against the latest registry state.")
+    notify_parser = subparsers.add_parser("notify-feishu", help="Send a text notification to a Feishu group bot webhook.")
+    notify_parser.add_argument("message", nargs="?", help="Message text. If omitted, stdin will be read.")
+    notify_parser.add_argument("--title", help="Optional title prefix rendered in the message body.")
     return parser
 
 
@@ -584,6 +618,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "runtime-check":
         _print_json(run_runtime_check())
+        return 0
+    if args.command == "notify-feishu":
+        _print_json(
+            notify_feishu(
+                message=args.message,
+                title=args.title,
+            )
+        )
         return 0
 
     parser.error(f"unsupported command: {args.command}")
