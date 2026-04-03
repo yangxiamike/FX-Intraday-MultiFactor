@@ -110,6 +110,8 @@ class CliWorkflowTests(unittest.TestCase):
         try:
             self._copy_repo_fixture_bundle(project_root)
             result = run_demo_pipeline(project_root=project_root)
+            factor_summary = json.loads(Path(result["research"]["factor_summary_path"]).read_text(encoding="utf-8"))
+            factor_tearsheet = Path(result["research"]["factor_tearsheet_path"]).read_text(encoding="utf-8")
 
             self.assertEqual(result["status"], "completed")
             self.assertEqual(result["registry"]["dataset_records"], 1)
@@ -118,9 +120,15 @@ class CliWorkflowTests(unittest.TestCase):
             self.assertTrue(Path(result["dataset"]["storage_path"]).exists())
             self.assertTrue(Path(result["backtest"]["vectorized_path"]).exists())
             self.assertTrue(Path(result["research"]["gold_research_base_path"]).exists())
+            self.assertTrue(Path(result["research"]["factor_summary_path"]).exists())
+            self.assertTrue(Path(result["research"]["factor_tearsheet_path"]).exists())
             self.assertTrue(Path(result["research"]["walk_forward_splits_path"]).exists())
             self.assertGreater(result["research"]["walk_forward_split_count"], 0)
             self.assertEqual(result["research"]["session_audit_report"]["session_distribution"]["Tokyo"], 241)
+            self.assertEqual(factor_summary["factor_count"], 6)
+            self.assertIn("segment_highlights", factor_summary["factors"][0])
+            self.assertIn("# Factor Tearsheet", factor_tearsheet)
+            self.assertIn("best_session_segment", factor_tearsheet)
         finally:
             shutil.rmtree(project_root, ignore_errors=True)
 

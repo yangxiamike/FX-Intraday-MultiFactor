@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from statistics import mean
 from typing import Sequence
 
@@ -139,6 +140,132 @@ def _sample_pairs(
     return left, right
 
 
+def _pct_change(values: Sequence[float], periods: int) -> list[float | None]:
+    result: list[float | None] = []
+    for index, value in enumerate(values):
+        if index < periods:
+            result.append(None)
+            continue
+        base = values[index - periods]
+        result.append((value / base) - 1.0 if base else None)
+    return result
+
+
+def _rolling_std(values: Sequence[float], window: int) -> list[float | None]:
+    result: list[float | None] = []
+    for index in range(len(values)):
+        if index + 1 < window:
+            result.append(None)
+            continue
+        window_values = list(values[index + 1 - window : index + 1])
+        mean_value = sum(window_values) / len(window_values)
+        variance = sum((item - mean_value) ** 2 for item in window_values) / len(window_values)
+        result.append(variance ** 0.5)
+    return result
+
+
+def _median(values: Sequence[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    midpoint = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        return float(ordered[midpoint])
+    return float((ordered[midpoint - 1] + ordered[midpoint]) / 2)
+
+
+def _label_by_threshold(
+    values: Sequence[float | None],
+    low_label: str,
+    high_label: str,
+) -> list[str | None]:
+    valid_values = [float(value) for value in values if value is not None]
+    threshold = _median(valid_values)
+    if threshold is None:
+        return [None] * len(values)
+    labels: list[str | None] = []
+    for value in values:
+        if value is None:
+            labels.append(None)
+            continue
+        labels.append(high_label if float(value) >= threshold else low_label)
+    return labels
+
+
+def _derive_event_flags(
+    timestamps: Sequence[datetime],
+    event_windows: list[tuple[datetime, datetime]] | None,
+) -> list[str]:
+    if not event_windows:
+        return ["non_event"] * len(timestamps)
+    return [
+        "event" if any(start <= ts <= end for start, end in event_windows) else "non_event"
+        for ts in timestamps
+    ]
+
+
+def _derive_context_labels(
+    bars: Sequence[FXBar1m],
+    event_windows: list[tuple[datetime, datetime]] | None,
+) -> dict[str, list[str | None]]:
+    closes = [bar.close for bar in bars]
+    returns_1 = [0.0 if value is None else value for value in _pct_change(closes, 1)]
+    realized_vol = _rolling_std(returns_1, window=10)
+    momentum_5 = _pct_change(closes, 5)
+    trend_strength: list[float | None] = []
+    for momentum_value, volatility_value in zip(momentum_5, realized_vol):
+        if momentum_value is None or volatility_value in (None, 0.0):
+            trend_strength.append(None)
+            continue
+        trend_strength.append(abs(momentum_value) / float(volatility_value))
+    return {
+        "session": [bar.session.value if bar.session else None for bar in bars],
+        "vol_regime": _label_by_threshold(realized_vol, low_label="low_vol", high_label="high_vol"),
+        "trend_regime": _label_by_threshold(trend_strength, low_label="ranging", high_label="trending"),
+        "event_flag": _derive_event_flags([bar.ts for bar in bars], event_windows),
+    }
+
+
+def _segment_statistics(
+    factor_values: Sequence[float | None],
+    forward_values: Sequence[float | None],
+    labels: Sequence[str | None],
+) -> dict[str, dict[str, float | int | None]]:
+    grouped: dict[str, tuple[list[float], list[float]]] = {}
+    observed_labels = sorted({label for label in labels if label is not None})
+    for label in observed_labels:
+        grouped[label] = ([], [])
+    for factor_value, forward_value, label in zip(factor_values, forward_values, labels):
+        if factor_value is None or forward_value is None or label is None:
+            continue
+        factor_group, forward_group = grouped.setdefault(label, ([], []))
+        factor_group.append(float(factor_value))
+        forward_group.append(float(forward_value))
+    metrics: dict[str, dict[str, float | int | None]] = {}
+    for label, (factor_group, forward_group) in grouped.items():
+        hit_count = sum(1 for value in forward_group if value > 0)
+        metrics[label] = {
+            "sample_size": len(factor_group),
+            "rank_ic": _spearman(factor_group, forward_group) if factor_group and forward_group else None,
+            "mean_forward_return": sum(forward_group) / len(forward_group) if forward_group else None,
+            "hit_rate": (hit_count / len(forward_group)) if forward_group else None,
+        }
+    return metrics
+
+
+def _cross_labels(
+    left: Sequence[str | None],
+    right: Sequence[str | None],
+) -> list[str | None]:
+    labels: list[str | None] = []
+    for left_value, right_value in zip(left, right):
+        if left_value is None or right_value is None:
+            labels.append(None)
+            continue
+        labels.append(f"{left_value}__{right_value}")
+    return labels
+
+
 class VectorizedResearchEngine:
     def evaluate(
         self,
@@ -169,6 +296,12 @@ class VectorizedResearchEngine:
                 }
                 for bar in bars
             ]
+        context_labels = _derive_context_labels(bars=bars, event_windows=event_windows)
+        for index, row in enumerate(feature_rows):
+            row["session"] = context_labels["session"][index]
+            row["vol_regime"] = context_labels["vol_regime"][index]
+            row["trend_regime"] = context_labels["trend_regime"][index]
+            row["event_flag"] = context_labels["event_flag"][index]
         walk_forward_splits = build_walk_forward_splits(bars)
         reports: list[FactorValidationReport] = []
         primary_horizon = horizons[1] if len(horizons) > 1 else horizons[0]
@@ -205,6 +338,34 @@ class VectorizedResearchEngine:
                 failure_reasons.append("rank_ic below candidate threshold")
             if out_of_sample_rank_ic is None:
                 failure_reasons.append("insufficient out-of-sample observations")
+            segment_metrics = {
+                "session": _segment_statistics(factor_values, forward_returns[primary_horizon], context_labels["session"]),
+                "vol_regime": _segment_statistics(
+                    factor_values,
+                    forward_returns[primary_horizon],
+                    context_labels["vol_regime"],
+                ),
+                "trend_regime": _segment_statistics(
+                    factor_values,
+                    forward_returns[primary_horizon],
+                    context_labels["trend_regime"],
+                ),
+                "event_flag": _segment_statistics(
+                    factor_values,
+                    forward_returns[primary_horizon],
+                    context_labels["event_flag"],
+                ),
+                "session_x_trend_regime": _segment_statistics(
+                    factor_values,
+                    forward_returns[primary_horizon],
+                    _cross_labels(context_labels["session"], context_labels["trend_regime"]),
+                ),
+                "session_x_vol_regime": _segment_statistics(
+                    factor_values,
+                    forward_returns[primary_horizon],
+                    _cross_labels(context_labels["session"], context_labels["vol_regime"]),
+                ),
+            }
             metrics = {
                 "coverage": round(coverage, 6),
                 "ic": ic,
@@ -216,6 +377,7 @@ class VectorizedResearchEngine:
                 "decay": decay,
                 "cost_adjusted_effect": cost_adjusted,
                 "out_of_sample_rank_ic": out_of_sample_rank_ic,
+                "segment_metrics": segment_metrics,
                 "future_leak_check": True,
             }
             reports.append(

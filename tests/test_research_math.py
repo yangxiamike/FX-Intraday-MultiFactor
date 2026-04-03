@@ -12,6 +12,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from fx_multi_factor.data.contracts import FXBar1m, SessionLabel
 from fx_multi_factor.factors.library import momentum, spread_pressure, volume_zscore
+from fx_multi_factor.research.engine import VectorizedResearchEngine
 from fx_multi_factor.research.labels import compute_forward_returns
 
 
@@ -69,6 +70,54 @@ class ResearchMathTests(unittest.TestCase):
         self.assertAlmostEqual(spread_values[2] or 0.0, -0.6, places=8)
         self.assertEqual(volume_values[:2], [None, None])
         self.assertAlmostEqual(volume_values[2] or 0.0, 1.22474487139, places=8)
+
+    def test_research_engine_emits_segment_metrics_and_context_labels(self) -> None:
+        start = datetime(2025, 3, 3, 0, 0, tzinfo=UTC)
+        sessions = [
+            SessionLabel.TOKYO,
+            SessionLabel.LONDON,
+            SessionLabel.NEW_YORK,
+            SessionLabel.OVERLAP,
+        ]
+        bars: list[FXBar1m] = []
+        for index in range(40):
+            base = 100.0 + index * 0.03
+            oscillation = 0.6 if index % 6 < 3 else -0.4
+            close = base + oscillation
+            bars.append(
+                FXBar1m(
+                    ts=start + timedelta(minutes=index),
+                    symbol="USDJPY",
+                    open=close - 0.08,
+                    high=close + 0.12,
+                    low=close - 0.15,
+                    close=close,
+                    tick_volume=50.0 + (index % 8) * 3.0 + index * 0.2,
+                    spread_proxy=0.3 + (index % 5) * 0.05,
+                    provider="test",
+                    ingest_batch_id="batch",
+                    session=sessions[index % len(sessions)],
+                )
+            )
+
+        result = VectorizedResearchEngine().evaluate(
+            bars=bars,
+            factor_specs=[momentum(2)],
+            horizons=(1, 5),
+            event_windows=[(bars[20].ts, bars[22].ts)],
+        )
+
+        self.assertEqual(len(result.reports), 1)
+        self.assertEqual(result.feature_rows[20]["event_flag"], "event")
+        self.assertEqual(result.feature_rows[0]["session"], SessionLabel.TOKYO.value)
+        self.assertIn(result.feature_rows[15]["vol_regime"], ("low_vol", "high_vol"))
+        self.assertIn(result.feature_rows[15]["trend_regime"], ("ranging", "trending"))
+
+        segment_metrics = result.reports[0].metrics["segment_metrics"]
+        self.assertIn("Tokyo", segment_metrics["session"])
+        self.assertIn("event", segment_metrics["event_flag"])
+        self.assertIn("non_event", segment_metrics["event_flag"])
+        self.assertTrue(any(key.startswith("Tokyo__") for key in segment_metrics["session_x_trend_regime"]))
 
 
 if __name__ == "__main__":

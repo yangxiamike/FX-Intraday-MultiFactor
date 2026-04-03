@@ -2,8 +2,8 @@
 
 ## 当前在做
 
-- 基于真实 fixture 稳定化研究输入输出
-- 继续推进因子研究与研究产物固化
+- 在统一 `.venv` 环境下持续做全量绿灯回归
+- 继续补 provider 失败路径、数据质量异常样本、向量化主/回退双路径测试
 
 ## 上次做到哪里
 
@@ -23,6 +23,13 @@
 - 已完成 `C2` 基础落地：`forward_returns` 与 `walk_forward_splits` 产物已落盘
 - `demo` 已切到优先读取已落盘的 `Gold research_base`
 - 已将 rolling 因子、correlation 与 `forward_returns` 改为“优先向量化，缺依赖回退”的实现
+- 已补上聚合 `factor_summary` 与 markdown `factor_tearsheet` 产物，并接入 `demo`
+- 已补上 `session / vol_regime / trend_regime / event_flag` 分块评估，并写入 factor report / summary / tearsheet
+- 已创建项目专用 `.venv`，并安装 `-e .[api,backtest,db,dev,orchestration,research]`
+- 已确认现有测试需在 `.venv` 下执行，旧 `mt5` 环境不再作为正式测试环境
+- 已补齐 `FastAPI`、注册表、向量化回测、runtime gate 的规则级测试
+- 已在统一 `.venv` 环境完成全量 `unittest` 回归，当前为 `20 passed, 2 skipped`
+- 已确认 `2 skipped` 为在线集成测试，条件是 `FXMF_POLYGON_API_KEY` 且 `FXMF_RUN_LIVE_TESTS=1`
 
 ## 最近关键决定
 
@@ -38,6 +45,8 @@
 - Gold `research_base` 元数据固定包含：研究输入字段列表、会话审计报告、来源层说明
 - 第 1 轮 `walk_forward_splits` 固定使用 `120/60/60` bars 结构，先保证切分口径稳定
 - 研究侧数值计算主路径改为 `numpy/pandas` 向量化，纯 Python 实现只保留为缺依赖回退
+- 正式测试环境统一固定为仓库根目录 `.venv`
+- 每进入下一步开发前，必须先完成当前已存在测试的全量绿灯回归
 - 文档分工调整为：
   - `README.md` 管总览与入口
   - `spec.md` 管范围与契约
@@ -48,14 +57,16 @@
 
 ## 当前阻塞
 
-- `fastapi`、`prefect`、`backtrader` 等可选依赖当前环境仍未装齐，无法现场验证 API / 调度 / 订单适配真实运行
-- 当前环境仍未安装 `numpy/pandas`，因此向量化主路径还没在本机直接执行验证
 - Massive/Polygon 免费档只支持最近 `2 年` 历史和 `End-of-day` recency，不适合全历史回补
 - `Gold research_base` 已被研究流程复用，但更细的事件窗口与样本过滤还未沉淀成独立配置层
+- `event_flag` 当前只支持来自研究参数 `event_windows` 的显式窗口，尚未接外部事件源
 - 本地 `git push` 仍受当前环境认证链路影响
+- 现有测试虽然已绿，但向量化相关计算仍会打印 `numpy` runtime warning，后续需要判断是预期容错还是需要收敛成静默处理
 
 ## 下一步
 
-- 继续推进 `C3/C4`，补更完整的因子研究产物与评估摘要
+- 继续补 provider 失败路径、数据质量异常样本、向量化主/回退双路径测试
+- 收敛当前 `numpy` runtime warning（相关性/方差退化窗口）
+- 在现有分块评估基础上继续补更细的外部事件标签与独立配置层
 - 视需要刷新或扩充真实 fixture 窗口，但保持免费档约束内的小样本策略
 - 继续维护 `docs/progress.md` 作为阶段性里程碑记录

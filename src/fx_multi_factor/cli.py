@@ -23,6 +23,7 @@ from fx_multi_factor.data.providers import LocalCsvMarketDataProvider, PolygonCu
 from fx_multi_factor.data.quality import run_fx_bar_quality_checks
 from fx_multi_factor.data.sessions import summarize_sessions
 from fx_multi_factor.factors.library import default_factor_specs
+from fx_multi_factor.factors.tearsheet import build_factor_tearsheet_summary, render_factor_tearsheet
 from fx_multi_factor.registry.models import (
     DatasetRecord,
     FactorLifecycleStatus,
@@ -443,6 +444,15 @@ def run_demo_pipeline(project_root: Path | None = None) -> dict[str, Any]:
     order_level_path = lake.write_gold_artifact("backtests/order_level_demo", order_level_result)
     lake.write_gold_artifact("research/forward_returns", research_result.forward_returns)
     walk_forward_path = lake.write_gold_artifact("research/walk_forward_splits", research_result.walk_forward_splits)
+    factor_summary_path = lake.write_gold_artifact(
+        "research/factor_summary",
+        build_factor_tearsheet_summary(research_result.reports),
+    )
+    factor_tearsheet_path = lake.write_gold_artifact(
+        "research/factor_tearsheet",
+        render_factor_tearsheet(research_result.reports),
+        suffix="md",
+    )
 
     strategy_record = StrategyRecord(
         strategy_id=f"{strategy_spec.name}:{strategy_spec.version}",
@@ -485,6 +495,8 @@ def run_demo_pipeline(project_root: Path | None = None) -> dict[str, Any]:
             "gold_research_base_path": ingest_result.gold_research_base_path,
             "gold_research_metadata_path": ingest_result.gold_research_metadata_path,
             "session_audit_report": asdict(ingest_result.session_audit_report),
+            "factor_summary_path": factor_summary_path,
+            "factor_tearsheet_path": factor_tearsheet_path,
             "walk_forward_splits_path": walk_forward_path,
             "walk_forward_split_count": len(research_result.walk_forward_splits),
         },

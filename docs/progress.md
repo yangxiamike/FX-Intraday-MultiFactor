@@ -13,7 +13,7 @@
 
 当前处于：
 
-- API 小样本接入与真实样本测试口径切换阶段
+- 真实 fixture 驱动的研究产物固化阶段
 
 当前原则：
 
@@ -55,8 +55,14 @@
 - 已补上 `forward_returns` 与 `walk_forward_splits` 固化产物
 - `demo` 已优先从已落盘的 `Gold research_base` 读取研究基础输入
 - 已将 rolling 因子、correlation 与 `forward_returns` 改为优先向量化实现
+- `demo` 已补上聚合 `factor_summary` 与 markdown `factor_tearsheet` 输出
+- 研究引擎已补上 `session / vol_regime / trend_regime / event_flag` 分块评估
 - 修复 `registry` sqlite 连接未显式关闭问题
 - 修复缺少 `tzdata` 时 `session` 标注直接失败的问题
+- 新建仓库根目录 `.venv` 作为统一正式测试环境，并安装完整依赖组
+- 已补上 `FastAPI`、注册表存储、向量化回测、runtime gate 的自动化测试
+- 已在统一 `.venv` 环境完成全量 `unittest` 回归：`20 passed, 2 skipped`
+- 已确认跳过项为在线集成测试，需 `FXMF_POLYGON_API_KEY` 且 `FXMF_RUN_LIVE_TESTS=1`
 
 ## 3. 当前已存在的代码骨架
 
@@ -88,9 +94,10 @@
 
 下一阶段重点是：
 
-1. 对照 `spec.md`、`plan.md`、`ARCHITECTURE.md` 检查现有骨架是否偏航
-2. 安装并验证 `numpy/pandas` 主路径，然后继续推进 C3/C4
-3. 持续维护 `CONTEXT.md` 与 `docs/progress.md` 的分层记录
+1. 补齐 provider 失败路径、数据质量异常样本、向量化主/回退双路径测试
+2. 收敛当前 `numpy` runtime warning（相关性/方差退化窗口）
+3. 在现有分块评估基础上继续补更细的外部事件标签与独立配置层
+4. 持续维护 `CONTEXT.md` 与 `docs/progress.md` 的分层记录
 
 ## 6. Git 状态
 
