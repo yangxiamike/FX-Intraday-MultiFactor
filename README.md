@@ -1,51 +1,61 @@
-# FX Multi-Factor v1 Scaffold
+# 外汇日内单标的多因子交易系统
 
-This repository implements the first development round of a research-first, single-instrument FX intraday multi-factor trading system.
+## 项目简介
 
-The current scope is fixed to:
+本项目当前目标是完成 `USDJPY + 1m + UTC + 研究优先` 的第 1 轮闭环。
 
-- `USDJPY`
-- `1m` bars
-- `UTC` as the canonical timestamp
-- price-and-volume-led research
-- `Notebook + CLI + minimal FastAPI`
-- `Windows host + Docker Desktop + single-machine Compose`
+第 1 轮重点不是实盘和完整生产化，而是先把下面这条主链路跑通：
 
-## Architecture Summary
+- 数据导入与标准化
+- 因子研究与验证
+- 策略级回测
+- 注册表登记
+- 基础门控检查
 
-The codebase is organized as a modular monolith:
+当前默认使用方式是：
 
-- `src/fx_multi_factor/data`: provider contracts, ingestion, session tagging, quality checks, lake layout
-- `src/fx_multi_factor/research`: forward-return labels, factor evaluation, sample data generation
-- `src/fx_multi_factor/factors`: factor specs, library, validation reports, tearsheets
-- `src/fx_multi_factor/backtest`: vectorized research backtest and order-level backtest adapter
-- `src/fx_multi_factor/registry`: dataset, factor, and strategy registries
-- `src/fx_multi_factor/runtime`: deploy gate and runtime gate checks
-- `services/api`: minimal FastAPI service
-- `services/worker`: Prefect-oriented worker entrypoint
-- `notebooks`: research-oriented scripts/templates
+- `Notebook + CLI + 最小 FastAPI`
+- `Windows 主机 + Docker Desktop + 单机 Compose`
 
-## Data Layers
+正式范围、冻结决策和验收标准以 `spec.md` 为准。
 
-- `Bronze`: raw provider payloads and batch metadata
-- `Silver`: normalized `fx_bar_1m`, session labels, and data quality outputs
-- `Gold`: factor inputs, validation reports, backtest snapshots, signal artifacts
+## 技术栈
 
-## Optional Dependency Strategy
+- `Python 3.12`
+- `uv`
+- `pandas / DuckDB / PyArrow / numpy / scipy / statsmodels`
+- `FastAPI`
+- `Prefect 3`
+- `Backtrader`（仅订单级回测适配层预留）
+- `sqlite`（开发态注册表）
+- `PostgreSQL`（目标兼容后端）
 
-The repository is executable as a pure-Python skeleton for local verification. When optional packages are installed, the same codebase enables the planned stack:
+## 文档导航
 
-- research: `pandas`, `duckdb`, `pyarrow`, `numpy`, `scipy`, `statsmodels`, `jupyterlab`
-- orchestration: `prefect`
-- api: `fastapi`, `uvicorn`
-- backtest: `backtrader`
-- database: `sqlalchemy`, `psycopg`
+建议阅读顺序：
 
-This lets the project run in a clean workspace without blocking on network package installation, while still exposing the target interfaces and Compose setup.
+1. `README.md`
+2. `CONTEXT.md`
+3. `spec.md`
+4. `plan.md`
+5. `ARCHITECTURE.md`
 
-## Quick Start
+各文档职责：
 
-### Local bootstrap
+- `README.md`：项目总览、运行方式、文档入口
+- `spec.md`：范围、契约、冻结决策、验收口径
+- `plan.md`：阶段顺序、任务清单、依赖关系
+- `ARCHITECTURE.md`：模块职责、数据流、关键设计决策
+- `CONTEXT.md`：当前在做、最近决定、阻塞、下一步
+- `architecture_mindmap.md`：架构视觉补充，不作为唯一事实来源
+- `docs/progress.md`：阶段性里程碑记录
+- `docs/git_workflow.md`：git 与文档同步规则
+- `docs/errors_and_lessons.md`：环境问题、踩坑和经验
+- `docs/factor_research/*`：因子研究流程、评审模板和示例
+
+## 本地运行
+
+### 最小验证
 
 ```powershell
 python -m fx_multi_factor.cli bootstrap
@@ -53,41 +63,55 @@ python -m fx_multi_factor.cli demo
 python -m unittest discover -s tests
 ```
 
-### Install the planned stack with `uv`
+### 安装计划依赖
 
 ```powershell
 pip install uv
 uv pip install --system -e .[api,backtest,db,dev,orchestration,research]
 ```
 
-### Start services with Docker Compose
+### 启动 Compose
 
 ```powershell
 docker compose up --build
 ```
 
-The stack exposes:
+默认暴露：
 
-- API: `http://localhost:8000`
-- Prefect UI: `http://localhost:4200`
-- JupyterLab: `http://localhost:8888`
-- PostgreSQL: `localhost:5432`
+- API：`http://localhost:8000`
+- Prefect UI：`http://localhost:4200`
+- JupyterLab：`http://localhost:8888`
+- PostgreSQL：`localhost:5432`
 
-## Public Interfaces Implemented
+## 常用命令
 
-- `MarketDataProvider.fetch(spec, since, until)`
-- `ReferenceDataProvider.fetch_series(series_id, since, until)`
-- `DatasetSpec`
-- `FXBar1m`
-- `FactorSpec`
-- `FactorValidationReport`
-- `BacktestEngine.run(strategy_spec, dataset_ref, cost_model)`
-- `DatasetRegistry`, `FactorRegistry`, `StrategyRegistry`
+```powershell
+python -m fx_multi_factor.cli bootstrap
+python -m fx_multi_factor.cli demo
+python -m unittest discover -s tests
+docker compose up --build
+```
 
-## Current Defaults
+## 目录结构
 
-- `USDJPY` is the only instrument in scope
-- FX volume is treated as `tick_volume`
-- `spread_proxy` can be estimated when provider quote data is unavailable
-- `Massive/Polygon` is the intended primary market data provider
-- `FRED/ALFRED`, `Trading Economics`, and `LSEG Workspace` are modeled as provider adapters, but not hard-wired into the v1 demo
+- `src/fx_multi_factor/data`：数据导入、标准化、分层、质量检查
+- `src/fx_multi_factor/research`：标签、样本切分、研究流程
+- `src/fx_multi_factor/factors`：因子定义、因子库、验证报告
+- `src/fx_multi_factor/backtest`：研究回测与订单级回测适配骨架
+- `src/fx_multi_factor/registry`：dataset / factor / strategy 注册表
+- `src/fx_multi_factor/runtime`：Deploy Gate / Runtime Gate
+- `services/api`：最小 FastAPI
+- `services/worker`：Prefect 或后台任务入口
+- `docs`：规划、流程、研究模板与经验文档
+- `notebooks`：研究脚本与 notebook 入口
+- `runtime_data`：运行时产物目录
+
+## 文档维护约定
+
+- 改系统范围、字段语义、接口契约：更新 `spec.md`
+- 改阶段顺序、任务拆分、依赖关系：更新 `plan.md`
+- 改模块边界、调用关系、架构决策：更新 `ARCHITECTURE.md`
+- 每次阶段性完成后：更新 `CONTEXT.md`
+- 产生新的阶段性里程碑后：更新 `docs/progress.md`
+- 产生新的流程规则后：更新 `docs/git_workflow.md`
+- 出现新的坑、限制或经验后：更新 `docs/errors_and_lessons.md`

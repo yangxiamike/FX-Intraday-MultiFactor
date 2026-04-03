@@ -32,8 +32,8 @@
 - 先锁定边界，再扩实现
 - 先做研究闭环，再补生产强化
 - 数据、因子、回测、注册、门控必须统一口径
-- 遇到大改动，优先更新 `spec.md` 和 `plan.md`
-- 新会话不要直接开写代码，先读文档再决定动作
+- 遇到大改动，优先更新 `spec.md`、`plan.md` 和 `ARCHITECTURE.md`
+- 新会话不要直接开写代码，先读 `CONTEXT.md` 和相关文档再决定动作
 - 每次开发结束后，必须同步更新受影响的文档
 - 每次有效修改后，必须做对应的 git 维护
 
@@ -54,8 +54,11 @@
 
 新会话建议先读：
 
+- `@README.md`
+- `@CONTEXT.md`
 - `@spec.md`
 - `@plan.md`
+- `@ARCHITECTURE.md`
 - `@architecture_mindmap.md`
 - `@docs/git_workflow.md`
 - `@docs/progress.md`
@@ -63,22 +66,28 @@
 
 ## 5. 使用规则
 
-- 如果需要理解系统是什么：先看 `@spec.md`
+- 如果需要理解项目总览和怎么进入：先看 `@README.md`
+- 如果需要了解当前做到哪、卡在哪里、下一步干什么：先看 `@CONTEXT.md`
+- 如果需要理解系统范围和契约：先看 `@spec.md`
 - 如果需要理解先做什么：先看 `@plan.md`
-- 如果需要快速看整体架构：先看 `@architecture_mindmap.md`
+- 如果需要快速看正式架构：先看 `@ARCHITECTURE.md`
+- 如果需要快速看整体视觉结构：再看 `@architecture_mindmap.md`
 - 如果需要理解 git 和开发流程：先看 `@docs/git_workflow.md`
-- 如果需要了解做到哪了：先看 `@docs/progress.md`
+- 如果需要回看阶段性里程碑：先看 `@docs/progress.md`
 - 如果需要了解踩过哪些坑：先看 `@docs/errors_and_lessons.md`
 
 ## 6. 维护要求
 
 后续如果出现以下情况，需要更新对应文档：
 
+- 项目简介、运行方式、文档入口变化：更新 `README.md`
 - 规格变化：更新 `spec.md`
 - 开发计划变化：更新 `plan.md`
-- 进度推进：更新 `docs/progress.md`
+- 架构认知变化：更新 `ARCHITECTURE.md`
+- 阶段性完成、阻塞变化、下一步变化：更新 `CONTEXT.md`
+- 阶段性里程碑推进：更新 `docs/progress.md`
 - 新的错误、坑或经验：更新 `docs/errors_and_lessons.md`
-- 架构认知变化：更新 `architecture_mindmap.md`
+- 架构视觉补充需要同步时：更新 `architecture_mindmap.md`
 - git 流程变化：更新 `docs/git_workflow.md`
 
 ## 7. 开发后强制动作
@@ -91,10 +100,13 @@
 
 常见规则：
 
-- 改了系统边界、模块职责、接口语义：更新 `spec.md`
+- 改了项目整体说明、运行方式、文档导航：更新 `README.md`
+- 改了系统边界、接口语义、字段契约：更新 `spec.md`
 - 改了开发顺序、阶段目标、里程碑：更新 `plan.md`
-- 改了整体架构理解：更新 `architecture_mindmap.md`
-- 推进了开发进度：更新 `docs/progress.md`
+- 改了模块职责、调用关系、关键设计决策：更新 `ARCHITECTURE.md`
+- 完成了阶段性任务、变更了阻塞或下一步：更新 `CONTEXT.md`
+- 推进了阶段性里程碑：更新 `docs/progress.md`
+- 改了整体架构可视化表达：更新 `architecture_mindmap.md`
 - 遇到新错误、新坑、新经验：更新 `docs/errors_and_lessons.md`
 
 ### 7.2 Git 维护

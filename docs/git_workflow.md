@@ -36,10 +36,13 @@
 
 常见对应关系：
 
-- 改了规格、接口、模块职责：更新 `spec.md`
+- 改了项目总览、运行方式、文档入口：更新 `README.md`
+- 改了规格、接口、字段语义、验收口径：更新 `spec.md`
 - 改了任务顺序、里程碑、阶段目标：更新 `plan.md`
-- 改了整体结构认知：更新 `architecture_mindmap.md`
-- 推进了开发：更新 `docs/progress.md`
+- 改了模块职责、调用关系、关键设计决策：更新 `ARCHITECTURE.md`
+- 当前状态、阻塞、下一步变化：更新 `CONTEXT.md`
+- 推进了阶段性里程碑：更新 `docs/progress.md`
+- 改了整体结构可视化表达：更新 `architecture_mindmap.md`
 - 发现新错误、新坑、新经验：更新 `docs/errors_and_lessons.md`
 - 改了开发流程或版本管理习惯：更新本文件
 
