@@ -13,6 +13,9 @@ mindmap
   root((FX 日内单标的多因子系统))
     第1轮
       数据层
+        Massive/Polygon免费档API
+        真实样本fixture
+        真实样本回放
         Bronze
         Silver
         Gold

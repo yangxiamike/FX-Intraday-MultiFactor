@@ -15,6 +15,9 @@ class Settings:
     default_symbol: str
     default_timezone: str
     primary_market_provider: str
+    polygon_api_key: str | None
+    polygon_base_url: str
+    run_live_tests: bool
 
 
 def load_settings(project_root: Path | None = None) -> Settings:
@@ -37,5 +40,7 @@ def load_settings(project_root: Path | None = None) -> Settings:
         default_symbol=os.getenv("FXMF_DEFAULT_SYMBOL", "USDJPY"),
         default_timezone=os.getenv("FXMF_DEFAULT_TIMEZONE", "UTC"),
         primary_market_provider=os.getenv("FXMF_PRIMARY_MARKET_PROVIDER", "polygon"),
+        polygon_api_key=os.getenv("FXMF_POLYGON_API_KEY"),
+        polygon_base_url=os.getenv("FXMF_POLYGON_BASE_URL", "https://api.polygon.io"),
+        run_live_tests=os.getenv("FXMF_RUN_LIVE_TESTS", "").strip() == "1",
     )
-

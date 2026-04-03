@@ -46,7 +46,7 @@
 这些点已经确认：
 
 - 注册表：开发态允许 sqlite，接口兼容 PostgreSQL
-- 数据接入：先做文件导入，不优先做 API 增量
+- 数据接入：先做 Massive/Polygon 免费档 API 小样本接入，文件导入用于真实样本回放
 - 回测：研究层先做完整，订单级只做适配骨架
 - API：先做最小骨架，不做完整后台
 
@@ -105,14 +105,16 @@
 交付物：
 
 - provider 抽象
-- 文件导入器
+- Massive/Polygon API provider
+- 真实样本 fixture
+- 文件导入器（真实样本回放）
 - ingest pipeline
 - data lake layout
 - quality report
 
 退出条件：
 
-- 一组样例数据可以完整入湖
+- 一组真实 API 小样本可以完整入湖
 - 可以输出质量报告
 - 可以追溯到 ingest batch
 
@@ -443,8 +445,14 @@
 任务 B2：实现文件导入入口
 
 - 输入：CSV/Parquet/批量历史文件
-- 输出：文件导入器和 ingest batch 记录
-- 验收条件：一份 `USDJPY 1m` 文件可被系统读入
+- 输出：真实样本回放导入器和 ingest batch 记录
+- 验收条件：一份基于真实 API 获取的 `USDJPY 1m` 样本文件可被系统读入
+
+任务 B2A：实现 Massive/Polygon 免费档 API 小样本接入
+
+- 输入：`USDJPY 1m`、固定历史窗口、`FXMF_POLYGON_API_KEY`
+- 输出：真实 API 样本下载命令、fixture 刷新命令
+- 验收条件：可从免费档拉取最近 2 年内固定历史窗口的小样本
 
 任务 B3：实现标准化与 Silver 写入
 
@@ -541,7 +549,7 @@
 任务 F1：实现最小 CLI
 
 - 输入：核心模块
-- 输出：bootstrap、demo、registry、runtime check 命令
+- 输出：bootstrap、fetch-api-sample、ingest-api-sample、demo、registry、runtime check 命令
 - 验收条件：无 UI 情况下也能走完整示例链路
 
 任务 F2：实现最小 FastAPI

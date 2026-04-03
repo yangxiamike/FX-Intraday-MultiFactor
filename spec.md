@@ -97,14 +97,16 @@
 
 决定：
 
-- 第 1 轮 `先做文件导入`
-- `不优先做 API 增量拉取`
+- 第 1 轮必须具备 `Massive/Polygon 免费档 API 接入`
+- 第 1 轮以 `真实 API 小样本验证` 为主
+- `文件导入` 保留为真实样本回放路径，而不是主接入策略
 
 含义：
 
-- 先支持 CSV / Parquet / 批量历史文件导入
-- 先把数据管理和研究闭环跑通
-- 自动拉数放到后续版本
+- 先支持从 Massive/Polygon 免费档抓取 `USDJPY 1m` 固定历史窗口样本
+- 所有测试默认基于真实 API 获取后固化的样本
+- 文件导入主要用于离线复现和 fixture 回放
+- 免费档限制下，不承诺全历史回补和实时能力
 
 ### 4.3 订单级回测深度
 
@@ -251,8 +253,13 @@
 ### 8.3 数据源策略
 
 - 第 1 轮主市场数据源按 `Massive/Polygon` 的数据结构设计
-- 第 1 轮接入优先方式是 `文件导入`
-- 第 1 轮不以实时 API 拉取为核心任务
+- 第 1 轮必须实现 `Massive/Polygon` API 小样本接入
+- 第 1 轮默认按免费档能力设计：
+  - 最近 `2 年` 历史范围
+  - `End-of-day` recency
+  - 有频率限制
+- 第 1 轮不以实时拉流为核心任务
+- `文件导入` 仅作为真实样本回放路径
 - `FRED/ALFRED`、`Trading Economics`、`LSEG Workspace` 先保留 provider 接口
 - `MT5` 不作为第 1 轮主数据底座
 
@@ -521,6 +528,8 @@
 第 1 轮 CLI 只需要最小能力：
 
 - bootstrap
+- fetch-api-sample
+- ingest-api-sample
 - demo
 - registry 查看
 - runtime check
@@ -530,6 +539,7 @@
 只有满足下面条件，第 1 轮才算完成：
 
 - 可以导入或生成 `USDJPY 1m` 数据
+- 可以从 `Massive/Polygon` 免费档 API 拉取 `USDJPY 1m` 真实小样本
 - 可以完成 Bronze / Silver / Gold 写入
 - 可以对至少 3 个基础因子输出标准化 report
 - 可以完成策略级回测
@@ -542,7 +552,7 @@
 在后续继续编码前，第 1 轮的深度定义已经固定为：
 
 - 注册表：`开发期 sqlite，目标兼容 PostgreSQL`
-- 数据接入：`先文件导入，后 API 增量`
+- 数据接入：`先 Massive/Polygon 免费档 API 小样本，文件导入仅作真实样本回放`
 - 回测：`研究层完整，订单级先骨架`
 - API：`先最小骨架，不做完整后台`
 

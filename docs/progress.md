@@ -13,7 +13,7 @@
 
 当前处于：
 
-- 工程骨架修正与入口落地阶段
+- API 小样本接入与真实样本测试口径切换阶段
 
 当前原则：
 
@@ -45,6 +45,9 @@
 - 固化 `NormalizationReport` 与 Silver 元数据结构，明确 UTC / bar-open / session 语义
 - 增强 `DataQualityReport`，补齐重复、缺口、非法价格、非整分钟时间戳等摘要字段
 - 新增质量检查测试，覆盖非整分钟时间戳告警
+- 补上 Massive/Polygon 免费档 provider 实现骨架
+- 新增 `fetch-api-sample / ingest-api-sample` 命令
+- 将 `demo` 和测试主路径切换到真实 fixture 优先
 - 修复 `registry` sqlite 连接未显式关闭问题
 - 修复缺少 `tzdata` 时 `session` 标注直接失败的问题
 
@@ -70,7 +73,7 @@
 
 - 注册表：开发态允许 `sqlite`
 - 目标数据库：`PostgreSQL`
-- 数据接入：第 1 轮先做 `文件导入`
+- 数据接入：第 1 轮主路径切换到 `Massive/Polygon` 免费档 API 小样本
 - 回测：`研究层完整，订单级先骨架`
 - API：只做最小 `FastAPI`
 
@@ -79,7 +82,7 @@
 下一阶段重点是：
 
 1. 对照 `spec.md`、`plan.md`、`ARCHITECTURE.md` 检查现有骨架是否偏航
-2. 进入任务组 B5，补齐会话标注复核与 Gold 基础研究输入输出
+2. 在拿到真实 API key 后固化首份 fixture，并继续推进 B5
 3. 持续维护 `CONTEXT.md` 与 `docs/progress.md` 的分层记录
 
 ## 6. Git 状态

@@ -6,6 +6,7 @@
 
 第 1 轮重点不是实盘和完整生产化，而是先把下面这条主链路跑通：
 
+- Massive/Polygon 免费档 API 小样本接入
 - 数据导入与标准化
 - 因子研究与验证
 - 策略级回测
@@ -60,10 +61,18 @@
 ```powershell
 pip install -e .
 fxmf bootstrap
-fxmf ingest-file .\data\usdjpy_1m.csv
+set FXMF_POLYGON_API_KEY=你的key
+fxmf fetch-api-sample
+fxmf ingest-api-sample
 fxmf demo
 python -m unittest discover -s tests
 ```
+
+说明：
+
+- `fetch-api-sample` 会调用 Massive/Polygon 免费档 API 抓取固定真实小样本，并同时写入仓库 fixture 与本地缓存
+- `ingest-file` 仍可用，但定位是“导入真实样本文件 / 离线回放”
+- 默认离线测试依赖真实 fixture；若 fixture 不存在，相关测试会明确跳过并提示先抓样本
 
 ### 安装计划依赖
 
@@ -95,7 +104,8 @@ docker compose up --build
 
 ```powershell
 fxmf bootstrap
-fxmf ingest-file .\data\usdjpy_1m.csv
+fxmf fetch-api-sample
+fxmf ingest-api-sample
 fxmf demo
 python -m unittest discover -s tests
 uvicorn services.api.app:app --reload

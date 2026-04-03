@@ -45,6 +45,7 @@
 - 改了整体结构可视化表达：更新 `architecture_mindmap.md`
 - 发现新错误、新坑、新经验：更新 `docs/errors_and_lessons.md`
 - 改了开发流程或版本管理习惯：更新本文件
+- 改了真实 fixture、测试数据口径或 API 接入方式：同步更新 `README.md`、`spec.md`、`plan.md` 和相关研究文档
 
 ## 5. 提交粒度要求
 

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
-import math
 from dataclasses import asdict, is_dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import Enum
@@ -16,8 +16,9 @@ from fx_multi_factor.common.config import load_settings
 from fx_multi_factor.common.paths import ProjectPaths
 from fx_multi_factor.data.contracts import DatasetLayer, DatasetSpec
 from fx_multi_factor.data.lake import DataLake
-from fx_multi_factor.data.pipeline import ingest_market_data
-from fx_multi_factor.data.providers import GeneratedMarketDataProvider, LocalCsvMarketDataProvider
+from fx_multi_factor.data.pipeline import ingest_market_data, normalize_fx_bars
+from fx_multi_factor.data.providers import LocalCsvMarketDataProvider, PolygonCurrenciesProvider
+from fx_multi_factor.data.quality import run_fx_bar_quality_checks
 from fx_multi_factor.factors.library import default_factor_specs
 from fx_multi_factor.registry.models import (
     DatasetRecord,
@@ -29,6 +30,12 @@ from fx_multi_factor.registry.models import (
 from fx_multi_factor.registry.store import RegistryStore
 from fx_multi_factor.research.engine import VectorizedResearchEngine
 from fx_multi_factor.runtime.gates import DeployGate, RuntimeContext, RuntimeGate
+
+SAMPLE_SYMBOL = "USDJPY"
+SAMPLE_WINDOW_START = datetime(2025, 3, 3, 0, 0, tzinfo=UTC)
+SAMPLE_WINDOW_END = datetime(2025, 3, 3, 4, 0, tzinfo=UTC)
+SAMPLE_ROW_LIMIT_HINT = 240
+SAMPLE_FIXTURE_STEM = "usdjpy_1m_polygon_basic_2025-03-03"
 
 
 def _json_default(value: Any) -> Any:
@@ -45,6 +52,22 @@ def _json_default(value: Any) -> Any:
 
 def _print_json(payload: dict[str, Any] | list[dict[str, Any]]) -> None:
     print(json.dumps(payload, indent=2, ensure_ascii=False, default=_json_default))
+
+
+def _write_json(path: Path, payload: Any) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=_json_default), encoding="utf-8")
+    return path
+
+
+def _write_csv(path: Path, rows: list[dict[str, Any]]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = list(rows[0].keys()) if rows else ["ts"]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    return path
 
 
 def _build_dataset_spec(symbol: str, provider: str) -> DatasetSpec:
@@ -73,37 +96,6 @@ def _build_dataset_spec(symbol: str, provider: str) -> DatasetSpec:
     )
 
 
-def _generate_demo_rows(spec: DatasetSpec) -> list[dict[str, object]]:
-    start = datetime(2026, 3, 30, 0, 0, tzinfo=UTC)
-    base_price = 149.5
-    rows: list[dict[str, object]] = []
-    previous_close = base_price
-    for index in range(240):
-        ts = start + timedelta(minutes=index)
-        trend = index * 0.0012
-        intraday_wave = math.sin(index / 8.0) * 0.08
-        mean_reversion = math.cos(index / 5.0) * 0.03
-        close = round(base_price + trend + intraday_wave + mean_reversion, 6)
-        open_price = round(previous_close, 6)
-        range_size = 0.02 + (index % 5) * 0.004
-        high = round(max(open_price, close) + range_size, 6)
-        low = round(min(open_price, close) - range_size, 6)
-        rows.append(
-            {
-                "ts": ts.isoformat().replace("+00:00", "Z"),
-                "symbol": spec.symbol,
-                "open": open_price,
-                "high": high,
-                "low": low,
-                "close": close,
-                "tick_volume": 120 + (index % 17) * 9 + abs(intraday_wave) * 220,
-                "spread_proxy": round(0.35 + (index % 6) * 0.04, 4),
-            }
-        )
-        previous_close = close
-    return rows
-
-
 def _resolve_runtime(project_root: Path | None = None) -> tuple[ProjectPaths, RegistryStore]:
     settings = load_settings(project_root=project_root)
     paths = ProjectPaths.from_settings(settings)
@@ -111,6 +103,127 @@ def _resolve_runtime(project_root: Path | None = None) -> tuple[ProjectPaths, Re
     registry = RegistryStore(settings.registry_path)
     registry.init()
     return paths, registry
+
+
+def _fixture_dir(project_root: Path) -> Path:
+    return project_root / "tests" / "fixtures" / "market_data"
+
+
+def _cache_fixture_dir(paths: ProjectPaths) -> Path:
+    return paths.artifacts_root / "fixtures" / "market_data"
+
+
+def _fixture_paths(project_root: Path, paths: ProjectPaths) -> dict[str, Path]:
+    repo_dir = _fixture_dir(project_root)
+    cache_dir = _cache_fixture_dir(paths)
+    return {
+        "repo_raw": repo_dir / f"{SAMPLE_FIXTURE_STEM}.raw.json",
+        "repo_csv": repo_dir / f"{SAMPLE_FIXTURE_STEM}.csv",
+        "repo_metadata": repo_dir / f"{SAMPLE_FIXTURE_STEM}.metadata.json",
+        "cache_raw": cache_dir / f"{SAMPLE_FIXTURE_STEM}.raw.json",
+        "cache_csv": cache_dir / f"{SAMPLE_FIXTURE_STEM}.csv",
+        "cache_metadata": cache_dir / f"{SAMPLE_FIXTURE_STEM}.metadata.json",
+    }
+
+
+def _resolve_demo_fixture_csv(project_root: Path, paths: ProjectPaths) -> Path:
+    fixture_paths = _fixture_paths(project_root=project_root, paths=paths)
+    for candidate in (fixture_paths["repo_csv"], fixture_paths["cache_csv"]):
+        if candidate.exists():
+            return candidate
+    raise RuntimeError(
+        "未找到真实 Polygon fixture。请先运行 `fxmf fetch-api-sample`，"
+        "或用 `fxmf ingest-file` 导入一份基于真实 API 获取的样本 CSV。"
+    )
+
+
+def _ingest_with_provider(
+    provider: Any,
+    spec: DatasetSpec,
+    project_root: Path | None = None,
+    extra_metadata: dict[str, Any] | None = None,
+) -> tuple[ProjectPaths, RegistryStore, Any, DatasetRecord]:
+    paths, registry = _resolve_runtime(project_root=project_root)
+    lake = DataLake(paths)
+    lake.bootstrap()
+    ingest_result = ingest_market_data(provider=provider, spec=spec, lake=lake)
+    dataset_record = _register_dataset(
+        registry=registry,
+        spec=spec,
+        source_name=provider.name,
+        ingest_result=ingest_result,
+        extra_metadata=extra_metadata,
+    )
+    return paths, registry, ingest_result, dataset_record
+
+
+def _build_polygon_provider(project_root: Path | None = None) -> PolygonCurrenciesProvider:
+    settings = load_settings(project_root=project_root)
+    return PolygonCurrenciesProvider(
+        api_key=settings.polygon_api_key,
+        base_url=settings.polygon_base_url,
+    )
+
+
+def _fetch_sample_bundle(project_root: Path | None = None) -> tuple[ProjectPaths, dict[str, Path], DatasetSpec, Any, list[Any], Any, Any]:
+    settings = load_settings(project_root=project_root)
+    paths = ProjectPaths.from_settings(settings)
+    paths.ensure()
+    provider = _build_polygon_provider(project_root=project_root)
+    spec = _build_dataset_spec(symbol=SAMPLE_SYMBOL, provider=provider.name)
+    fetched = provider.fetch(spec=spec, since=SAMPLE_WINDOW_START, until=SAMPLE_WINDOW_END)
+    sample_batch_id = f"{provider.name}-sample-{SAMPLE_WINDOW_START:%Y%m%d%H%M}"
+    bars, normalization_report = normalize_fx_bars(
+        raw_rows=fetched.rows,
+        spec=spec,
+        ingest_batch_id=sample_batch_id,
+        provider_name=provider.name,
+    )
+    quality_report = run_fx_bar_quality_checks(bars, expected_symbol=spec.symbol)
+    fixture_paths = _fixture_paths(project_root=paths.root, paths=paths)
+    return paths, fixture_paths, spec, fetched, bars, normalization_report, quality_report
+
+
+def fetch_api_sample(project_root: Path | None = None) -> dict[str, Any]:
+    paths, fixture_paths, spec, fetched, bars, normalization_report, quality_report = _fetch_sample_bundle(
+        project_root=project_root
+    )
+    csv_rows = [bar.as_record() for bar in bars]
+    metadata_payload = {
+        "provider": spec.provider,
+        "symbol": spec.symbol,
+        "frequency": spec.frequency,
+        "timezone": spec.timezone,
+        "history_cap": "2_years_basic_plan",
+        "sample_window": {
+            "start": SAMPLE_WINDOW_START,
+            "end": SAMPLE_WINDOW_END,
+            "expected_rows_hint": SAMPLE_ROW_LIMIT_HINT,
+        },
+        "normalization_report": normalization_report,
+        "quality_report": quality_report,
+        "fetch_metadata": fetched.metadata,
+    }
+    for raw_key, csv_key, metadata_key in (
+        ("repo_raw", "repo_csv", "repo_metadata"),
+        ("cache_raw", "cache_csv", "cache_metadata"),
+    ):
+        _write_json(fixture_paths[raw_key], fetched.raw_payload)
+        _write_csv(fixture_paths[csv_key], csv_rows)
+        _write_json(fixture_paths[metadata_key], metadata_payload)
+    return {
+        "status": "completed",
+        "provider": spec.provider,
+        "symbol": spec.symbol,
+        "sample_window": {
+            "start": SAMPLE_WINDOW_START,
+            "end": SAMPLE_WINDOW_END,
+        },
+        "row_count": len(bars),
+        "normalization_report": asdict(normalization_report),
+        "quality_report": asdict(quality_report),
+        "fixture_paths": {key: value for key, value in fixture_paths.items()},
+    }
 
 
 def bootstrap_project(project_root: Path | None = None) -> dict[str, Any]:
@@ -195,18 +308,12 @@ def ingest_file(
     if not file_path.exists():
         raise FileNotFoundError(file_path)
 
-    paths, registry = _resolve_runtime(project_root=project_root)
-    lake = DataLake(paths)
-    lake.bootstrap()
-
     spec = _build_dataset_spec(symbol=symbol, provider=provider_name)
     provider = LocalCsvMarketDataProvider(path=file_path, name=provider_name)
-    ingest_result = ingest_market_data(provider=provider, spec=spec, lake=lake)
-    dataset_record = _register_dataset(
-        registry=registry,
+    _, registry, ingest_result, dataset_record = _ingest_with_provider(
+        provider=provider,
         spec=spec,
-        source_name=provider.name,
-        ingest_result=ingest_result,
+        project_root=project_root,
         extra_metadata={"source_file": str(file_path.resolve())},
     )
     return {
@@ -235,28 +342,41 @@ def ingest_file(
     }
 
 
-def run_demo_pipeline(project_root: Path | None = None) -> dict[str, Any]:
-    paths, registry = _resolve_runtime(project_root=project_root)
-    lake = DataLake(paths)
-    lake.bootstrap()
+def ingest_api_sample(project_root: Path | None = None) -> dict[str, Any]:
+    fetch_result = fetch_api_sample(project_root=project_root)
+    fixture_csv_path = Path(str(fetch_result["fixture_paths"]["cache_csv"]))
+    ingest_result = ingest_file(
+        file_path=fixture_csv_path,
+        symbol=SAMPLE_SYMBOL,
+        provider_name="polygon",
+        project_root=project_root,
+    )
+    return {
+        "status": "completed",
+        "sample_window": fetch_result["sample_window"],
+        "fixture_paths": fetch_result["fixture_paths"],
+        "ingest": ingest_result,
+    }
 
-    spec = _build_dataset_spec(symbol="USDJPY", provider="demo_generated")
-    provider = GeneratedMarketDataProvider(name="demo_generated", row_factory=_generate_demo_rows)
-    ingest_result = ingest_market_data(provider=provider, spec=spec, lake=lake)
+
+def run_demo_pipeline(project_root: Path | None = None) -> dict[str, Any]:
+    paths, _ = _resolve_runtime(project_root=project_root)
+    fixture_csv_path = _resolve_demo_fixture_csv(project_root=paths.root, paths=paths)
+    spec = _build_dataset_spec(symbol=SAMPLE_SYMBOL, provider="polygon")
+    provider = LocalCsvMarketDataProvider(path=fixture_csv_path, name="polygon_fixture")
+    _, registry, ingest_result, dataset_record = _ingest_with_provider(
+        provider=provider,
+        spec=spec,
+        project_root=project_root,
+        extra_metadata={"source_fixture": str(fixture_csv_path)},
+    )
 
     factor_specs = default_factor_specs()
     research_result = VectorizedResearchEngine().evaluate(
         bars=ingest_result.bars,
         factor_specs=factor_specs,
     )
-
-    dataset_record = _register_dataset(
-        registry=registry,
-        spec=spec,
-        source_name=provider.name,
-        ingest_result=ingest_result,
-        extra_metadata={"source_kind": "generated_demo"},
-    )
+    lake = DataLake(paths)
 
     factor_records: list[FactorRecord] = []
     factor_report_paths: dict[str, str] = {}
@@ -415,7 +535,9 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("bootstrap", help="Create runtime directories and initialize the registry.")
-    subparsers.add_parser("demo", help="Run a local demo flow against generated USDJPY 1m data.")
+    subparsers.add_parser("demo", help="Run a local demo flow against a real Polygon fixture sample.")
+    subparsers.add_parser("fetch-api-sample", help="Fetch a fixed real USDJPY 1m sample from Polygon and save fixtures.")
+    subparsers.add_parser("ingest-api-sample", help="Fetch the fixed Polygon sample and ingest it into Bronze/Silver.")
     ingest_parser = subparsers.add_parser("ingest-file", help="Ingest a local USDJPY 1m CSV file into Bronze/Silver.")
     ingest_parser.add_argument("path", type=Path, help="Path to the input CSV file.")
     ingest_parser.add_argument("--symbol", default="USDJPY", help="Trading symbol, default is USDJPY.")
@@ -441,6 +563,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if args.command == "demo":
         _print_json(run_demo_pipeline())
+        return 0
+    if args.command == "fetch-api-sample":
+        _print_json(fetch_api_sample())
+        return 0
+    if args.command == "ingest-api-sample":
+        _print_json(ingest_api_sample())
         return 0
     if args.command == "ingest-file":
         _print_json(
