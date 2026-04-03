@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from typing import Sequence
 
+from fx_multi_factor.common.numeric import load_vector_modules, series_to_optional_float_list
 from fx_multi_factor.data.contracts import FXBar1m
 from fx_multi_factor.factors.specs import FactorSpec
 
@@ -26,17 +27,106 @@ def _rolling_slice(values: Sequence[float], end_index: int, window: int) -> list
     return list(values[start : end_index + 1])
 
 
+def _pct_change_python(values: Sequence[float], periods: int) -> list[float | None]:
+    result: list[float | None] = []
+    for index, value in enumerate(values):
+        if index < periods:
+            result.append(None)
+            continue
+        base = values[index - periods]
+        result.append((value / base) - 1.0 if base else None)
+    return result
+
+
+def _rolling_mean_python(values: Sequence[float], window: int) -> list[float | None]:
+    result: list[float | None] = []
+    for index in range(len(values)):
+        window_values = _rolling_slice(values, index, window)
+        if window_values is None:
+            result.append(None)
+            continue
+        result.append(sum(window_values) / len(window_values))
+    return result
+
+
+def _rolling_std_python(values: Sequence[float], window: int) -> list[float | None]:
+    result: list[float | None] = []
+    for index in range(len(values)):
+        window_values = _rolling_slice(values, index, window)
+        if window_values is None:
+            result.append(None)
+            continue
+        mean_value = sum(window_values) / len(window_values)
+        variance = sum((item - mean_value) ** 2 for item in window_values) / len(window_values)
+        result.append(variance ** 0.5)
+    return result
+
+
+def _rolling_max_python(values: Sequence[float], window: int) -> list[float | None]:
+    result: list[float | None] = []
+    for index in range(len(values)):
+        window_values = _rolling_slice(values, index, window)
+        result.append(max(window_values) if window_values is not None else None)
+    return result
+
+
+def _rolling_min_python(values: Sequence[float], window: int) -> list[float | None]:
+    result: list[float | None] = []
+    for index in range(len(values)):
+        window_values = _rolling_slice(values, index, window)
+        result.append(min(window_values) if window_values is not None else None)
+    return result
+
+
+def _pct_change_vectorized(values: Sequence[float], periods: int) -> list[float | None] | None:
+    modules = load_vector_modules("vectorized factor calculations")
+    if modules is None:
+        return None
+    _, pandas = modules
+    series = pandas.Series(list(values), dtype="float64")
+    return series_to_optional_float_list(series.pct_change(periods=periods))
+
+
+def _rolling_mean_vectorized(values: Sequence[float], window: int) -> list[float | None] | None:
+    modules = load_vector_modules("vectorized factor calculations")
+    if modules is None:
+        return None
+    _, pandas = modules
+    series = pandas.Series(list(values), dtype="float64")
+    return series_to_optional_float_list(series.rolling(window=window, min_periods=window).mean())
+
+
+def _rolling_std_vectorized(values: Sequence[float], window: int) -> list[float | None] | None:
+    modules = load_vector_modules("vectorized factor calculations")
+    if modules is None:
+        return None
+    _, pandas = modules
+    series = pandas.Series(list(values), dtype="float64")
+    return series_to_optional_float_list(series.rolling(window=window, min_periods=window).std(ddof=0))
+
+
+def _rolling_max_vectorized(values: Sequence[float], window: int) -> list[float | None] | None:
+    modules = load_vector_modules("vectorized factor calculations")
+    if modules is None:
+        return None
+    _, pandas = modules
+    series = pandas.Series(list(values), dtype="float64")
+    return series_to_optional_float_list(series.rolling(window=window, min_periods=window).max())
+
+
+def _rolling_min_vectorized(values: Sequence[float], window: int) -> list[float | None] | None:
+    modules = load_vector_modules("vectorized factor calculations")
+    if modules is None:
+        return None
+    _, pandas = modules
+    series = pandas.Series(list(values), dtype="float64")
+    return series_to_optional_float_list(series.rolling(window=window, min_periods=window).min())
+
+
 def momentum(window: int) -> FactorSpec:
     def compute(bars: Sequence[FXBar1m]) -> list[float | None]:
         closes = _closes(bars)
-        values: list[float | None] = []
-        for index, close in enumerate(closes):
-            if index < window:
-                values.append(None)
-                continue
-            base = closes[index - window]
-            values.append((close / base) - 1.0 if base else None)
-        return values
+        return _pct_change_vectorized(closes, window) or _pct_change_python(closes, window)
 
     return FactorSpec(
         name=f"momentum_{window}",
@@ -53,14 +143,8 @@ def momentum(window: int) -> FactorSpec:
 def short_reversal(window: int) -> FactorSpec:
     def compute(bars: Sequence[FXBar1m]) -> list[float | None]:
         closes = _closes(bars)
-        values: list[float | None] = []
-        for index, close in enumerate(closes):
-            if index < window:
-                values.append(None)
-                continue
-            base = closes[index - window]
-            values.append(-((close / base) - 1.0) if base else None)
-        return values
+        momentum_values = _pct_change_vectorized(closes, window) or _pct_change_python(closes, window)
+        return [(-value if value is not None else None) for value in momentum_values]
 
     return FactorSpec(
         name=f"reversal_{window}",
@@ -79,15 +163,13 @@ def range_position(window: int) -> FactorSpec:
         highs = [bar.high for bar in bars]
         lows = [bar.low for bar in bars]
         closes = _closes(bars)
+        high_roll = _rolling_max_vectorized(highs, window) or _rolling_max_python(highs, window)
+        low_roll = _rolling_min_vectorized(lows, window) or _rolling_min_python(lows, window)
         values: list[float | None] = []
-        for index, close in enumerate(closes):
-            high_window = _rolling_slice(highs, index, window)
-            low_window = _rolling_slice(lows, index, window)
-            if high_window is None or low_window is None:
+        for close, high_value, low_value in zip(closes, high_roll, low_roll):
+            if high_value is None or low_value is None:
                 values.append(None)
                 continue
-            high_value = max(high_window)
-            low_value = min(low_window)
             width = high_value - low_value
             if math.isclose(width, 0.0):
                 values.append(0.0)
@@ -110,20 +192,8 @@ def range_position(window: int) -> FactorSpec:
 def realized_volatility(window: int) -> FactorSpec:
     def compute(bars: Sequence[FXBar1m]) -> list[float | None]:
         closes = _closes(bars)
-        returns = [0.0]
-        for index in range(1, len(closes)):
-            previous = closes[index - 1]
-            returns.append((closes[index] / previous) - 1.0 if previous else 0.0)
-        values: list[float | None] = []
-        for index in range(len(returns)):
-            window_values = _rolling_slice(returns, index, window)
-            if window_values is None:
-                values.append(None)
-                continue
-            mean = sum(window_values) / len(window_values)
-            variance = sum((item - mean) ** 2 for item in window_values) / len(window_values)
-            values.append(variance ** 0.5)
-        return values
+        returns = [0.0 if value is None else value for value in (_pct_change_vectorized(closes, 1) or _pct_change_python(closes, 1))]
+        return _rolling_std_vectorized(returns, window) or _rolling_std_python(returns, window)
 
     return FactorSpec(
         name=f"volatility_{window}",
@@ -140,14 +210,8 @@ def realized_volatility(window: int) -> FactorSpec:
 def spread_pressure(window: int) -> FactorSpec:
     def compute(bars: Sequence[FXBar1m]) -> list[float | None]:
         spreads = _spreads(bars)
-        values: list[float | None] = []
-        for index in range(len(spreads)):
-            window_values = _rolling_slice(spreads, index, window)
-            if window_values is None:
-                values.append(None)
-                continue
-            values.append(-(sum(window_values) / len(window_values)))
-        return values
+        rolling_mean = _rolling_mean_vectorized(spreads, window) or _rolling_mean_python(spreads, window)
+        return [(-value if value is not None else None) for value in rolling_mean]
 
     return FactorSpec(
         name=f"spread_pressure_{window}",
@@ -164,16 +228,14 @@ def spread_pressure(window: int) -> FactorSpec:
 def volume_zscore(window: int) -> FactorSpec:
     def compute(bars: Sequence[FXBar1m]) -> list[float | None]:
         volumes = _volumes(bars)
+        rolling_mean = _rolling_mean_vectorized(volumes, window) or _rolling_mean_python(volumes, window)
+        rolling_std = _rolling_std_vectorized(volumes, window) or _rolling_std_python(volumes, window)
         values: list[float | None] = []
-        for index, volume in enumerate(volumes):
-            window_values = _rolling_slice(volumes, index, window)
-            if window_values is None:
+        for volume, mean_value, std_value in zip(volumes, rolling_mean, rolling_std):
+            if mean_value is None or std_value is None:
                 values.append(None)
                 continue
-            mean = sum(window_values) / len(window_values)
-            variance = sum((item - mean) ** 2 for item in window_values) / len(window_values)
-            std = variance ** 0.5
-            values.append((volume - mean) / std if std else 0.0)
+            values.append((volume - mean_value) / std_value if std_value else 0.0)
         return values
 
     return FactorSpec(

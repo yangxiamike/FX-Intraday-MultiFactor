@@ -100,6 +100,7 @@
 - 第 1 轮必须具备 `Massive/Polygon 免费档 API 接入`
 - 第 1 轮以 `真实 API 小样本验证` 为主
 - `文件导入` 保留为真实样本回放路径，而不是主接入策略
+- 第 1 轮研究侧可向量化数值计算默认必须走 `numpy/pandas/scipy`
 
 含义：
 
@@ -181,6 +182,7 @@
 - 做 walk-forward 切分
 - 管理事件窗口排除
 - 组织因子评估流程
+- correlation、z-score、rolling mean/std、分桶统计等默认优先使用向量化实现
 
 ### 7.3 factors
 

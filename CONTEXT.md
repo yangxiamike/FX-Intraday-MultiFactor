@@ -22,6 +22,7 @@
 - 已完成 `B5` 主体：会话审计报告、Gold `research_base` 基础表、DST 边界会话测试
 - 已完成 `C2` 基础落地：`forward_returns` 与 `walk_forward_splits` 产物已落盘
 - `demo` 已切到优先读取已落盘的 `Gold research_base`
+- 已将 rolling 因子、correlation 与 `forward_returns` 改为“优先向量化，缺依赖回退”的实现
 
 ## 最近关键决定
 
@@ -36,6 +37,7 @@
 - Silver 层元数据固定包含：数据集基础信息、时间语义、标准化摘要、质量报告
 - Gold `research_base` 元数据固定包含：研究输入字段列表、会话审计报告、来源层说明
 - 第 1 轮 `walk_forward_splits` 固定使用 `120/60/60` bars 结构，先保证切分口径稳定
+- 研究侧数值计算主路径改为 `numpy/pandas` 向量化，纯 Python 实现只保留为缺依赖回退
 - 文档分工调整为：
   - `README.md` 管总览与入口
   - `spec.md` 管范围与契约
@@ -47,6 +49,7 @@
 ## 当前阻塞
 
 - `fastapi`、`prefect`、`backtrader` 等可选依赖当前环境仍未装齐，无法现场验证 API / 调度 / 订单适配真实运行
+- 当前环境仍未安装 `numpy/pandas`，因此向量化主路径还没在本机直接执行验证
 - Massive/Polygon 免费档只支持最近 `2 年` 历史和 `End-of-day` recency，不适合全历史回补
 - `Gold research_base` 已被研究流程复用，但更细的事件窗口与样本过滤还未沉淀成独立配置层
 - 本地 `git push` 仍受当前环境认证链路影响

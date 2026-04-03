@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import sqrt
 from statistics import mean
 from typing import Sequence
 
+from fx_multi_factor.common.numeric import load_vector_modules
 from fx_multi_factor.data.contracts import FXBar1m
 from fx_multi_factor.factors.specs import FactorSpec
 from fx_multi_factor.factors.validation import FactorValidationReport
@@ -23,11 +23,20 @@ class ResearchRunResult:
 def _pearson(values_x: Sequence[float], values_y: Sequence[float]) -> float | None:
     if len(values_x) < 2 or len(values_y) < 2:
         return None
+    modules = load_vector_modules("vectorized research statistics")
+    if modules is not None:
+        numpy, _ = modules
+        left = numpy.asarray(values_x, dtype=float)
+        right = numpy.asarray(values_y, dtype=float)
+        if left.size < 2 or right.size < 2:
+            return None
+        coefficient = float(numpy.corrcoef(left, right)[0, 1])
+        return None if coefficient != coefficient else coefficient
     mean_x = sum(values_x) / len(values_x)
     mean_y = sum(values_y) / len(values_y)
     numerator = sum((left - mean_x) * (right - mean_y) for left, right in zip(values_x, values_y))
-    denominator_x = sqrt(sum((value - mean_x) ** 2 for value in values_x))
-    denominator_y = sqrt(sum((value - mean_y) ** 2 for value in values_y))
+    denominator_x = sum((value - mean_x) ** 2 for value in values_x) ** 0.5
+    denominator_y = sum((value - mean_y) ** 2 for value in values_y) ** 0.5
     if denominator_x == 0 or denominator_y == 0:
         return None
     return numerator / (denominator_x * denominator_y)
@@ -42,10 +51,22 @@ def _rank(values: Sequence[float]) -> list[float]:
 
 
 def _spearman(values_x: Sequence[float], values_y: Sequence[float]) -> float | None:
+    modules = load_vector_modules("vectorized research statistics")
+    if modules is not None:
+        _, pandas = modules
+        rank_x = pandas.Series(list(values_x), dtype="float64").rank(method="average")
+        rank_y = pandas.Series(list(values_y), dtype="float64").rank(method="average")
+        return _pearson(rank_x.tolist(), rank_y.tolist())
     return _pearson(_rank(values_x), _rank(values_y))
 
 
 def _quantile_buckets(values: Sequence[float], bucket_count: int = 5) -> list[int]:
+    modules = load_vector_modules("vectorized research statistics")
+    if modules is not None:
+        _, pandas = modules
+        ranked = pandas.Series(list(values), dtype="float64").rank(method="first")
+        buckets = pandas.qcut(ranked, q=bucket_count, labels=False, duplicates="drop")
+        return [int(value) + 1 for value in buckets.astype("Int64").fillna(0).tolist()]
     indexed = sorted(enumerate(values), key=lambda item: item[1])
     total = len(values)
     buckets = [0] * total

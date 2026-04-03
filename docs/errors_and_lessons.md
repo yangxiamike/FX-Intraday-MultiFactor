@@ -176,6 +176,18 @@
 - `demo` 和默认研究入口应优先从 `Gold research_base` 回读基础行
 - `forward_returns` 与 `walk_forward_splits` 也应作为 Gold 产物固化，而不是只停留在运行时对象
 
+### 1.14 研究数值计算不能长期停留在 Python for 循环
+
+已观察到：
+
+- correlation、rolling std、z-score、forward returns 这类计算用纯 Python 循环会很慢
+- 当样本窗口和因子数量增大后，研究迭代速度会明显恶化
+
+经验：
+
+- 这类可向量化计算默认应使用 `numpy/pandas/scipy`
+- 纯 Python 实现只能作为缺依赖回退，不能再当主实现维护
+
 ## 2. 已总结的开发经验
 
 - 这类系统最容易出问题的地方，不是代码量，而是范围和边界不清

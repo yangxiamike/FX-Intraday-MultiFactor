@@ -75,6 +75,7 @@ python -m unittest discover -s tests
 - 导入完成后会同时产出 `Silver` 标准化 bars 和 `Gold` 研究基础表
 - `Gold` 基础表默认包含 `session`、UTC 分钟索引以及 `Tokyo/London/NewYork/Overlap/OffSession` 标志列
 - `demo` 会优先从已落盘的 `Gold research_base` 读取研究基础行，并额外输出 `forward_returns` 与 `walk_forward_splits`
+- 研究侧的 correlation、rolling 统计、z-score、forward returns 主路径默认走 `numpy/pandas/scipy` 向量化实现
 - 默认离线测试依赖真实 fixture；若 fixture 不存在，相关测试会明确跳过并提示先抓样本
 
 ### 安装计划依赖
@@ -83,6 +84,11 @@ python -m unittest discover -s tests
 pip install uv
 uv pip install --system -e .[api,backtest,db,dev,orchestration,research]
 ```
+
+说明：
+
+- 研究侧性能优化依赖 `numpy / pandas / scipy`
+- 若未安装这些依赖，代码会回退到纯 Python 计算，但那只用于兜底，不是推荐运行方式
 
 ### 启动最小 FastAPI
 

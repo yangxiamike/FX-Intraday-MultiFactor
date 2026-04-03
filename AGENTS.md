@@ -32,6 +32,7 @@
 - 先锁定边界，再扩实现
 - 先做研究闭环，再补生产强化
 - 数据、因子、回测、注册、门控必须统一口径
+- correlation、z-score、rolling mean/std、forward returns 等可向量化数值计算，默认优先使用 `numpy/pandas/scipy`，不要长期保留 Python `for` 循环作为主实现
 - 遇到大改动，优先更新 `spec.md`、`plan.md` 和 `ARCHITECTURE.md`
 - 新会话不要直接开写代码，先读 `CONTEXT.md` 和相关文档再决定动作
 - 每次开发结束后，必须同步更新受影响的文档
